@@ -1,0 +1,16 @@
+services:
+  adminarr:
+    container_name: adminarr
+    build: .
+    image: ghcr.io/plexd281knilb/adminarr:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    dns:              # <--- Add this section
+      - 8.8.8.8       # Google DNS
+      - 1.1.1.1       # Cloudflare DNS
+    environment:
+      - DATABASE_URL=file:/app/data/dev.db
+      - NODE_ENV=production
+    volumes:
+      - ./data:/app/data
