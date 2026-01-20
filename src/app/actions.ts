@@ -508,8 +508,15 @@ export async function createAppUser(formData: FormData) {
 }
 
 export async function deleteAppUser(id: string) {
-    await prisma.user.delete({ where: { id } });
-    revalidatePath("/settings");
+    try {
+        await prisma.user.delete({ where: { id } });
+        // FIX: Revalidate the specific access page so the list updates immediately
+        revalidatePath("/settings/access");
+        revalidatePath("/settings");
+    } catch (e) {
+        console.error("Failed to delete user:", e);
+        // Optional: fail silently or throw, but logging helps debug
+    }
 }
 
 // --- NEW: LANDING PAGE & SUPPORT ACTIONS ---
