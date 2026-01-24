@@ -494,10 +494,12 @@ export async function fetchGlancesNodeDetails(id: string) {
 
 export async function performSync() {
   const logs: string[] = [];
+  console.log("[Sync] Starting Tautulli Sync Process...");
   logs.push("Starting Sync Process...");
 
   const instances = await prisma.tautulliInstance.findMany();
   if (instances.length === 0) {
+      console.log("[Sync] Error: No Tautulli instances found.");
       logs.push("Error: No Tautulli instances configured in Settings.");
       return { success: false, logs };
   }
@@ -505,6 +507,7 @@ export async function performSync() {
   const mergedUsers = new Map();
   const ignoredUsers = await prisma.ignoredUser.findMany();
   const ignoredIds = new Set(ignoredUsers.map(u => u.plexId));
+  console.log(`[Sync] Found ${ignoredIds.size} ignored users.`);
   logs.push(`Found ${ignoredIds.size} ignored users.`);
 
   let successfulFetches = 0;
@@ -512,6 +515,7 @@ export async function performSync() {
   const fetchInstanceData = async (instance: any) => {
     try {
         const baseUrl = instance.url.replace(/\/$/, "");
+        console.log(`[Sync] Connecting to ${instance.name} at ${baseUrl}...`);
         logs.push(`Connecting to Tautulli: ${instance.name} (${baseUrl})...`);
         
         const controller = new AbortController();
@@ -527,11 +531,14 @@ export async function performSync() {
         
         const data = await res.json();
         const users = data?.response?.data?.data || [];
+        
+        console.log(`[Sync] Success: ${instance.name} returned ${users.length} users.`);
         logs.push(`Success: Fetched ${users.length} users from ${instance.name}.`);
         successfulFetches++;
         return users;
     } catch (err: any) { 
         const msg = err.name === 'AbortError' ? 'Connection Timed Out' : err.message;
+        console.error(`[Sync] FAILED ${instance.name}: ${msg}`); // <--- PRINTS TO DOCKER LOGS
         logs.push(`Failed to sync ${instance.name}: ${msg}`);
         return []; 
     }
@@ -540,6 +547,7 @@ export async function performSync() {
   const results = await Promise.all(instances.map(fetchInstanceData));
 
   if (successfulFetches === 0) {
+      console.error("[Sync] CRITICAL: All Tautulli connections failed.");
       logs.push("CRITICAL: All Tautulli connections failed. Aborting database update.");
       return { success: false, logs };
   }
@@ -564,6 +572,7 @@ export async function performSync() {
       }
   });
 
+  console.log(`[Sync] Processing ${mergedUsers.size} unique users for DB update...`);
   logs.push(`Processing ${mergedUsers.size} unique users...`);
 
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -588,6 +597,7 @@ export async function performSync() {
                   }); 
                   updated++;
               } else { 
+                  console.log(`[Sync] Creating new user: ${userData.name}`);
                   await prisma.subscriber.create({ 
                       data: { 
                           plexId: plexId, 
@@ -606,10 +616,13 @@ export async function performSync() {
           }
       }
   } catch (e: any) {
+      console.error(`[Sync] CRITICAL DB ERROR: ${e.message}`); // <--- PRINTS TO DOCKER LOGS
+      console.error(e); 
       logs.push(`CRITICAL DB ERROR: ${e.message}`);
       return { success: false, logs };
   }
 
+  console.log(`[Sync] Complete. Added: ${added}, Updated: ${updated}`);
   logs.push(`Sync Complete: ${added} added, ${updated} updated.`);
   return { success: true, logs };
 }
