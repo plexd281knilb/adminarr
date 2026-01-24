@@ -4,11 +4,13 @@ services:
     build: .
     image: ghcr.io/plexd281knilb/adminarr:latest
     restart: unless-stopped
+    # FIX: Run as root to prevent "Read-only database" errors
+    user: root 
     ports:
       - "3000:3000"
-    dns:              # <--- Add this section
-      - 8.8.8.8       # Google DNS
-      - 1.1.1.1       # Cloudflare DNS
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
       - DATABASE_URL=file:/app/data/dev.db
       - NODE_ENV=production
