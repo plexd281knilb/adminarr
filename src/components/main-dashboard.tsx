@@ -64,7 +64,6 @@ export default function MainDashboard({
   const activeDownloads = apps.filter(a => ["sabnzbd", "nzbget"].includes(a.type))
     .reduce((acc, app) => acc + (app.queue?.length || 0), 0);
   
-  // NEW: Split Request Stats
   const requestStats = apps.filter(a => ["overseerr", "ombi"].includes(a.type))
     .reduce((acc, app) => ({
         total: acc.total + (app.stats?.total || 0),
@@ -131,37 +130,37 @@ export default function MainDashboard({
            {loading && <Badge variant="outline" className="text-xs border-transparent text-muted-foreground animate-pulse">Live Updates</Badge>}
         </div>
 
-        {/* 1. CLUSTER GRAPHS */}
-        <div className="grid gap-4 md:grid-cols-3">
+        {/* 1. CLUSTER GRAPHS - Mobile: Stacked, Desktop: 3 Cols */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
             <Card className="overflow-hidden">
-                <CardHeader className="flex flex-row items-center justify-between pb-2 bg-muted/20">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2"><Cpu className="h-4 w-4 text-purple-500"/> Cluster CPU</CardTitle>
-                    <div className="text-lg font-bold">{currentStats.cpu.toFixed(0)}%</div>
+                <CardHeader className="flex flex-row items-center justify-between pb-2 bg-muted/20 px-4 py-3">
+                    <CardTitle className="text-xs font-medium flex items-center gap-2"><Cpu className="h-3.5 w-3.5 text-purple-500"/> CPU Load</CardTitle>
+                    <div className="text-sm font-bold">{currentStats.cpu.toFixed(0)}%</div>
                 </CardHeader>
-                <CardContent className="p-0 h-[80px] bg-slate-50 dark:bg-slate-900/50">
+                <CardContent className="p-0 h-[60px] sm:h-[80px] bg-slate-50 dark:bg-slate-900/50">
                     <MiniGraph data={history.map(h => h.cpu)} color="#a855f7" max={100} />
                 </CardContent>
             </Card>
 
             <Card className="overflow-hidden">
-                <CardHeader className="flex flex-row items-center justify-between pb-2 bg-muted/20">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2"><Server className="h-4 w-4 text-orange-500"/> Cluster RAM</CardTitle>
-                    <div className="text-lg font-bold">{currentStats.mem.toFixed(0)}%</div>
+                <CardHeader className="flex flex-row items-center justify-between pb-2 bg-muted/20 px-4 py-3">
+                    <CardTitle className="text-xs font-medium flex items-center gap-2"><Server className="h-3.5 w-3.5 text-orange-500"/> RAM Usage</CardTitle>
+                    <div className="text-sm font-bold">{currentStats.mem.toFixed(0)}%</div>
                 </CardHeader>
-                <CardContent className="p-0 h-[80px] bg-slate-50 dark:bg-slate-900/50">
+                <CardContent className="p-0 h-[60px] sm:h-[80px] bg-slate-50 dark:bg-slate-900/50">
                     <MiniGraph data={history.map(h => h.mem)} color="#f97316" max={100} />
                 </CardContent>
             </Card>
 
             <Card className="overflow-hidden">
-                <CardHeader className="flex flex-row items-center justify-between pb-2 bg-muted/20">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2"><Activity className="h-4 w-4 text-blue-500"/> Total Network</CardTitle>
-                    <div className="flex gap-2 text-xs font-mono">
+                <CardHeader className="flex flex-row items-center justify-between pb-2 bg-muted/20 px-4 py-3">
+                    <CardTitle className="text-xs font-medium flex items-center gap-2"><Activity className="h-3.5 w-3.5 text-blue-500"/> Network</CardTitle>
+                    <div className="flex gap-2 text-[10px] sm:text-xs font-mono">
                         <span className="text-green-600">↓ {formatSpeed(currentStats.rx)}</span>
                         <span className="text-blue-600">↑ {formatSpeed(currentStats.tx)}</span>
                     </div>
                 </CardHeader>
-                <CardContent className="p-0 h-[80px] bg-slate-50 dark:bg-slate-900/50 relative">
+                <CardContent className="p-0 h-[60px] sm:h-[80px] bg-slate-50 dark:bg-slate-900/50 relative">
                      <div className="absolute inset-0">
                         <MiniGraph data={history.map(h => h.rx)} color="#22c55e" />
                      </div>
@@ -169,64 +168,59 @@ export default function MainDashboard({
             </Card>
         </div>
 
-        {/* 2. SUMMARY ROW */}
-        <div className="grid gap-4 md:grid-cols-4">
+        {/* 2. SUMMARY ROW - Mobile: 2 Cols, Desktop: 4 Cols */}
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
             <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium">Active Streams</CardTitle>
-                    <Play className="h-4 w-4 text-muted-foreground"/>
+                <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0 p-4">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">Streams</CardTitle>
+                    <Play className="h-3 w-3 text-muted-foreground"/>
                 </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{activeStreams}</div>
-                    <p className="text-xs text-muted-foreground">Global Streams</p>
+                <CardContent className="p-4 pt-0">
+                    <div className="text-xl sm:text-2xl font-bold">{activeStreams}</div>
                 </CardContent>
             </Card>
 
             <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium">Downloading</CardTitle>
-                    <Download className="h-4 w-4 text-muted-foreground"/>
+                <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0 p-4">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">Queue</CardTitle>
+                    <Download className="h-3 w-3 text-muted-foreground"/>
                 </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{activeDownloads}</div>
-                    <p className="text-xs text-muted-foreground">Queue Items</p>
+                <CardContent className="p-4 pt-0">
+                    <div className="text-xl sm:text-2xl font-bold">{activeDownloads}</div>
                 </CardContent>
             </Card>
 
             <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium">Requests</CardTitle>
-                    <Users className="h-4 w-4 text-muted-foreground"/>
+                <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0 p-4">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">Requests</CardTitle>
+                    <Users className="h-3 w-3 text-muted-foreground"/>
                 </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{requestStats.total}</div>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <CardContent className="p-4 pt-0">
+                    <div className="text-xl sm:text-2xl font-bold">{requestStats.total}</div>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground flex items-center gap-1 mt-1">
                         {requestStats.pending > 0 ? (
-                            <span className="text-yellow-600 font-bold flex items-center">
+                            <span className="text-yellow-600 font-semibold">
                                 {requestStats.pending} Pending
                             </span>
                         ) : (
                             <span className="text-green-600 flex items-center">
-                                <CheckCircle2 className="h-3 w-3 mr-1" /> All Caught Up
+                                <CheckCircle2 className="h-3 w-3 mr-1" /> All Good
                             </span>
                         )}
-                    </p>
+                    </div>
                 </CardContent>
             </Card>
 
             <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium">Primary Storage</CardTitle>
-                    <HardDrive className="h-4 w-4 text-muted-foreground"/>
+                <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0 p-4">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">Storage</CardTitle>
+                    <HardDrive className="h-3 w-3 text-muted-foreground"/>
                 </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{mainDiskPercent}%</div>
-                    <div className="h-2 w-full bg-secondary rounded-full mt-2 overflow-hidden">
+                <CardContent className="p-4 pt-0">
+                    <div className="text-xl sm:text-2xl font-bold">{mainDiskPercent}%</div>
+                    <div className="h-1.5 w-full bg-secondary rounded-full mt-2 overflow-hidden">
                         <div className={`h-full ${mainDiskPercent > 90 ? "bg-red-500" : "bg-primary"}`} style={{ width: `${mainDiskPercent}%` }} />
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1 truncate" title={mainDiskName}>
-                        {mainDiskName}
-                    </p>
                 </CardContent>
             </Card>
         </div>
@@ -235,14 +229,14 @@ export default function MainDashboard({
         <div className="space-y-6">
             <h3 className="text-lg font-semibold tracking-tight">Live Sessions</h3>
             
-            {plexServers.length === 0 && <div className="text-muted-foreground italic">No Plex servers configured.</div>}
+            {plexServers.length === 0 && <div className="text-muted-foreground italic text-sm">No Plex servers configured.</div>}
             
             <div className="grid gap-6 lg:grid-cols-2">
                 {plexServers.map((server: any) => (
                     <Card key={server.name} className="h-full">
                         <CardHeader className="pb-3">
                             <div className="flex justify-between items-center">
-                                <CardTitle className="flex items-center gap-2">
+                                <CardTitle className="flex items-center gap-2 text-base">
                                     <Server className="h-4 w-4 text-muted-foreground"/>
                                     {server.name}
                                 </CardTitle>
@@ -253,43 +247,35 @@ export default function MainDashboard({
                         </CardHeader>
                         <CardContent className="space-y-4">
                             {(!server.sessions || server.sessions.length === 0) ? (
-                                <div className="text-sm text-muted-foreground py-4 text-center border border-dashed rounded-lg">
+                                <div className="text-xs text-muted-foreground py-6 text-center border border-dashed rounded-lg">
                                     No active streams.
                                 </div>
                             ) : (
                                 server.sessions.map((session: any) => (
-                                    <div key={session.session_id} className="flex gap-4 items-start border-b last:border-0 pb-4">
+                                    <div key={session.session_id} className="flex gap-3 items-start border-b last:border-0 pb-4">
                                         <div className="flex-shrink-0">
                                             {session.user_thumb ? (
-                                                <img src={session.user_thumb} alt="User" className="h-10 w-10 rounded-full object-cover border" />
+                                                <img src={session.user_thumb} alt="User" className="h-9 w-9 rounded-full object-cover border" />
                                             ) : (
-                                                <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold">
+                                                <div className="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-xs">
                                                     {session.user ? session.user.charAt(0).toUpperCase() : "?"}
                                                 </div>
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0 space-y-1">
                                             <div className="flex justify-between items-start">
-                                                <div>
-                                                    <div className="font-semibold text-sm truncate max-w-[200px]" title={session.full_title || session.title}>
+                                                <div className="min-w-0 pr-2">
+                                                    <div className="font-semibold text-sm truncate" title={session.full_title || session.title}>
                                                         {session.grandparent_title ? `${session.grandparent_title} - ${session.title}` : session.title}
                                                     </div>
-                                                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                                    <div className="text-xs text-muted-foreground flex items-center gap-1 truncate">
                                                         <Users className="h-3 w-3" /> {session.friendly_name || session.user || "Local User"}
-                                                        <span className="text-slate-300">•</span>
-                                                        <span className="flex items-center gap-1">
-                                                            {getDeviceIcon(session.player || session.product)} 
-                                                            {session.product || session.player}
-                                                        </span>
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <Badge variant="outline" className="text-[10px] mb-1">
+                                                <div className="text-right flex-shrink-0">
+                                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 mb-1">
                                                         {getResolutionLabel(session.video_resolution)}
                                                     </Badge>
-                                                    <div className="text-[10px] text-muted-foreground">
-                                                        {session.transcode_decision === "transcode" ? "Transcoding" : "Direct Play"}
-                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="space-y-1">
@@ -297,7 +283,7 @@ export default function MainDashboard({
                                                     <span>{session.state === "playing" ? "Playing" : "Paused"}</span>
                                                     <span>{formatTimeLeft(session.duration - session.view_offset)}</span>
                                                 </div>
-                                                <Progress value={session.progress_percent} className="h-1.5" />
+                                                <Progress value={session.progress_percent} className="h-1" />
                                             </div>
                                         </div>
                                     </div>
@@ -309,18 +295,18 @@ export default function MainDashboard({
             </div>
         </div>
 
-        {/* 4. SERVER LIST */}
+        {/* 4. SERVER LIST - Mobile: 1 Col, Tablet: 2, Desktop: 3 */}
         <h3 className="text-lg font-semibold tracking-tight">Infrastructure</h3>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {hardwareNodes.map((node: any) => (
                 <Card key={node.id} className="hover:border-primary/50 transition-colors">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 p-4">
                         <CardTitle className="text-sm font-bold flex items-center gap-2">
                             <Server className="h-4 w-4"/> {node.name}
                         </CardTitle>
-                        {node.online ? <Badge variant="outline" className="text-green-600 bg-green-50">Online</Badge> : <Badge variant="destructive">Offline</Badge>}
+                        {node.online ? <Badge variant="outline" className="text-[10px] text-green-600 bg-green-50 px-2 py-0 h-5">Online</Badge> : <Badge variant="destructive" className="text-[10px] h-5">Offline</Badge>}
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-3 p-4 pt-0">
                         <div className="space-y-1">
                             <div className="flex justify-between text-xs text-muted-foreground">
                                 <span>CPU</span><span>{node.cpu?.toFixed(1)}%</span>

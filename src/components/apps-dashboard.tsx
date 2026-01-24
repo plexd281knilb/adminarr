@@ -19,7 +19,7 @@ function OpenButton({ app }: { app: any }) {
     
     if (!linkUrl) {
         return (
-            <Button size="sm" variant="outline" disabled className="gap-2 h-8 text-xs opacity-50">
+            <Button size="sm" variant="outline" disabled className="gap-2 h-7 text-[10px] px-2 opacity-50">
                 Open <ExternalLink className="h-3 w-3" />
             </Button>
         );
@@ -27,7 +27,7 @@ function OpenButton({ app }: { app: any }) {
 
     return (
         <Link href={linkUrl} target="_blank">
-            <Button size="sm" variant="outline" className="gap-2 h-8 text-xs">
+            <Button size="sm" variant="outline" className="gap-2 h-7 text-[10px] px-2">
                 Open <ExternalLink className="h-3 w-3" />
             </Button>
         </Link>
@@ -75,57 +75,57 @@ export default function AppsDashboard({ initialData }: { initialData: any[] }) {
   return (
     <div className="space-y-6">
        <div className="flex justify-end h-4">
-           {loading && <Badge variant="outline" className="text-xs border-transparent text-muted-foreground animate-pulse">Updating...</Badge>}
+           {loading && <Badge variant="outline" className="text-[10px] border-transparent text-muted-foreground animate-pulse">Updating...</Badge>}
        </div>
 
        <Tabs defaultValue="downloads" className="space-y-6">
-            {/* UPDATED: grid-cols-2 on mobile, grid-cols-5 on desktop, h-auto to allow wrapping */}
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 h-auto">
-                <TabsTrigger value="downloads"><Download className="h-4 w-4 mr-2"/> Downloads</TabsTrigger>
-                <TabsTrigger value="movies"><Film className="h-4 w-4 mr-2"/> Movies</TabsTrigger>
-                <TabsTrigger value="tv"><Tv className="h-4 w-4 mr-2"/> TV</TabsTrigger>
-                <TabsTrigger value="requests"><Users className="h-4 w-4 mr-2"/> Requests</TabsTrigger>
-                <TabsTrigger value="maintenance"><Wrench className="h-4 w-4 mr-2"/> Utility</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-3 lg:grid-cols-5 h-auto p-1 gap-1">
+                <TabsTrigger value="downloads" className="text-xs px-1 py-2"><Download className="h-3 w-3 mr-1.5"/> Downloads</TabsTrigger>
+                <TabsTrigger value="movies" className="text-xs px-1 py-2"><Film className="h-3 w-3 mr-1.5"/> Movies</TabsTrigger>
+                <TabsTrigger value="tv" className="text-xs px-1 py-2"><Tv className="h-3 w-3 mr-1.5"/> TV</TabsTrigger>
+                <TabsTrigger value="requests" className="text-xs px-1 py-2"><Users className="h-3 w-3 mr-1.5"/> Requests</TabsTrigger>
+                <TabsTrigger value="maintenance" className="text-xs px-1 py-2"><Wrench className="h-3 w-3 mr-1.5"/> Utility</TabsTrigger>
             </TabsList>
 
             {/* 1. DOWNLOADS */}
             <TabsContent value="downloads" className="space-y-6">
-                {downloaders.length === 0 && <div className="text-muted-foreground p-4">No download clients configured.</div>}
+                {downloaders.length === 0 && <div className="text-muted-foreground p-4 text-sm text-center">No download clients configured.</div>}
                 {downloaders.map(app => (
                     <Card key={app.id}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle className="text-lg font-medium flex items-center gap-2">
+                        <CardHeader className="flex flex-row items-center justify-between pb-2 p-4">
+                            <CardTitle className="text-base font-medium flex items-center gap-2">
                                 {app.name}
-                                {app.online ? <Badge className="bg-green-500">Online</Badge> : <Badge variant="destructive">Offline</Badge>}
+                                {app.online ? <span className="h-2 w-2 rounded-full bg-green-500"/> : <span className="h-2 w-2 rounded-full bg-red-500"/>}
                             </CardTitle>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3">
                                 {app.online && (
-                                    <div className="text-right">
-                                        <div className="text-2xl font-bold">{app.stats.speed}</div>
-                                        <div className="text-xs text-muted-foreground">Time Left: {app.stats.timeleft}</div>
+                                    <div className="text-right hidden sm:block">
+                                        <div className="text-lg font-bold leading-none">{app.stats.speed}</div>
+                                        <div className="text-[10px] text-muted-foreground">{app.stats.timeleft}</div>
                                     </div>
                                 )}
                                 <OpenButton app={app} />
                             </div>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="p-4 pt-0">
                             {!app.online ? <div className="text-sm text-red-500">Connection Failed</div> : (
                                 <div className="space-y-4">
-                                    <div className="flex gap-4 text-sm text-muted-foreground border-b pb-4">
-                                        <span className="flex items-center"><HardDrive className="h-4 w-4 mr-1"/> {formatMb(app.stats.mbleft)} Remaining</span>
+                                    <div className="flex justify-between text-xs text-muted-foreground border-b pb-2">
+                                        <span className="flex items-center"><HardDrive className="h-3 w-3 mr-1"/> {formatMb(app.stats.mbleft)}</span>
                                         <span className="flex items-center">
-                                            {app.stats.paused ? <Pause className="h-4 w-4 mr-1 text-yellow-500"/> : <Play className="h-4 w-4 mr-1 text-green-500"/>}
-                                            {app.stats.paused ? "Paused" : "Downloading"}
+                                            {app.stats.paused ? <Pause className="h-3 w-3 mr-1 text-yellow-500"/> : <Play className="h-3 w-3 mr-1 text-green-500"/>}
+                                            {app.stats.paused ? "Paused" : "Active"}
                                         </span>
+                                        <span className="sm:hidden font-mono text-foreground">{app.stats.speed}</span>
                                     </div>
                                     <div className="space-y-3">
-                                        {app.queue.length === 0 ? <div className="text-sm italic">Queue is empty.</div> : app.queue.map((item: any, i: number) => (
+                                        {app.queue.length === 0 ? <div className="text-xs italic text-muted-foreground text-center py-2">Queue is empty.</div> : app.queue.map((item: any, i: number) => (
                                             <div key={item.nzo_id || i} className="space-y-1">
-                                                <div className="flex justify-between text-sm font-medium">
+                                                <div className="flex justify-between text-xs font-medium">
                                                     <span className="truncate max-w-[70%]">{item.filename}</span>
                                                     <span>{item.percentage}%</span>
                                                 </div>
-                                                <Progress value={Number(item.percentage)} className="h-2" />
+                                                <Progress value={Number(item.percentage)} className="h-1.5" />
                                             </div>
                                         ))}
                                     </div>
@@ -137,21 +137,21 @@ export default function AppsDashboard({ initialData }: { initialData: any[] }) {
             </TabsContent>
 
             {/* 2. MOVIES */}
-            <TabsContent value="movies" className="grid gap-6 md:grid-cols-2">
+            <TabsContent value="movies" className="grid gap-4 md:grid-cols-2">
                 {movies.map(app => (
                     <Card key={app.id}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle>{app.name}</CardTitle>
+                        <CardHeader className="flex flex-row items-center justify-between pb-2 p-4">
+                            <CardTitle className="text-base">{app.name}</CardTitle>
                             <OpenButton app={app} />
                         </CardHeader>
-                        <CardContent>
-                            {!app.online ? <div className="text-red-500 text-sm">Offline</div> : (
-                                <div className="space-y-4">
-                                    {app.queue.length === 0 ? <div className="text-sm text-muted-foreground italic">No active downloads.</div> : 
+                        <CardContent className="p-4 pt-0">
+                            {!app.online ? <div className="text-red-500 text-xs">Offline</div> : (
+                                <div className="space-y-3">
+                                    {app.queue.length === 0 ? <div className="text-xs text-muted-foreground italic text-center py-2">No active downloads.</div> : 
                                         app.queue.map((item: any) => (
                                             <div key={item.id} className="border-b last:border-0 pb-2">
-                                                <div className="text-sm font-medium truncate">{item.title}</div>
-                                                <Progress value={100 - (item.sizeleft / item.size * 100)} className="h-1 mt-2" />
+                                                <div className="text-xs font-medium truncate">{item.title}</div>
+                                                <Progress value={100 - (item.sizeleft / item.size * 100)} className="h-1 mt-1.5" />
                                             </div>
                                         ))
                                     }
@@ -163,21 +163,21 @@ export default function AppsDashboard({ initialData }: { initialData: any[] }) {
             </TabsContent>
 
             {/* 3. TV */}
-            <TabsContent value="tv" className="grid gap-6 md:grid-cols-2">
+            <TabsContent value="tv" className="grid gap-4 md:grid-cols-2">
                 {tv.map(app => (
                     <Card key={app.id}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle>{app.name}</CardTitle>
+                        <CardHeader className="flex flex-row items-center justify-between pb-2 p-4">
+                            <CardTitle className="text-base">{app.name}</CardTitle>
                             <OpenButton app={app} />
                         </CardHeader>
-                        <CardContent>
-                             {!app.online ? <div className="text-red-500 text-sm">Offline</div> : (
-                                <div className="space-y-4">
-                                    {app.queue.length === 0 ? <div className="text-sm text-muted-foreground italic">No active downloads.</div> : 
+                        <CardContent className="p-4 pt-0">
+                             {!app.online ? <div className="text-red-500 text-xs">Offline</div> : (
+                                <div className="space-y-3">
+                                    {app.queue.length === 0 ? <div className="text-xs text-muted-foreground italic text-center py-2">No active downloads.</div> : 
                                         app.queue.map((item: any) => (
                                             <div key={item.id} className="border-b last:border-0 pb-2">
-                                                <div className="text-sm font-medium truncate">{item.title}</div>
-                                                <div className="text-xs text-muted-foreground">{item.episode?.title}</div>
+                                                <div className="text-xs font-medium truncate">{item.title}</div>
+                                                <div className="text-[10px] text-muted-foreground truncate">{item.episode?.title}</div>
                                             </div>
                                         ))
                                     }
@@ -188,37 +188,45 @@ export default function AppsDashboard({ initialData }: { initialData: any[] }) {
                 ))}
             </TabsContent>
 
-            {/* 4. REQUESTS */}
+            {/* 4. REQUESTS - UPDATED FOR TEXT WRAPPING */}
             <TabsContent value="requests" className="space-y-6">
                 {requests.map(app => (
                     <Card key={app.id}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle>{app.name}</CardTitle>
+                        <CardHeader className="flex flex-row items-center justify-between pb-2 p-4">
+                            <CardTitle className="text-base">{app.name}</CardTitle>
                             <OpenButton app={app} />
                         </CardHeader>
-                        <CardContent>
-                            {!app.online ? <div className="text-red-500 text-sm">Offline</div> : (
-                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <CardContent className="p-4 pt-0">
+                            {!app.online ? <div className="text-red-500 text-xs">Offline</div> : (
+                                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                                     {(!app.requests || app.requests.length === 0) ? (
-                                        <div className="text-sm italic text-muted-foreground p-2">No active requests found.</div>
+                                        <div className="text-xs italic text-muted-foreground p-2 text-center">No active requests found.</div>
                                     ) : (
                                         app.requests.map((req: any) => (
-                                            <div key={req.id} className="flex items-start space-x-3 border p-3 rounded bg-muted/20">
+                                            <div key={req.id} className="flex items-start space-x-3 border p-2 rounded bg-muted/20">
                                                 {/* IMAGE RENDERING */}
-                                                {req.media?.posterPath ? (
-                                                    <img 
-                                                        src={getPosterUrl(req.media.posterPath)!} 
-                                                        className="w-10 h-14 object-cover rounded shadow"
-                                                        alt="poster"
-                                                    />
-                                                ) : (
-                                                    <div className="w-10 h-14 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-400">?</div>
-                                                )}
+                                                <div className="flex-shrink-0">
+                                                    {req.media?.posterPath ? (
+                                                        <img 
+                                                            src={getPosterUrl(req.media.posterPath)!} 
+                                                            className="w-8 h-12 object-cover rounded shadow"
+                                                            alt="poster"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-8 h-12 bg-gray-200 rounded flex items-center justify-center text-[10px] text-gray-400">?</div>
+                                                    )}
+                                                </div>
                                                 
-                                                <div className="flex-1 overflow-hidden">
-                                                    <div className="text-sm font-bold truncate">{req.media?.title || "Unknown"}</div>
-                                                    <div className="text-xs text-muted-foreground">{req.requestedBy?.displayName}</div>
-                                                    <Badge variant={req.status === 2 ? "secondary" : "outline"} className="mt-1 text-[10px]">
+                                                {/* CONTENT - Allow Wrapping */}
+                                                <div className="flex-1 min-w-0">
+                                                    {/* Removed truncate, added leading-tight */}
+                                                    <div className="text-sm font-semibold leading-tight mb-0.5">
+                                                        {req.media?.title || "Unknown"}
+                                                    </div>
+                                                    <div className="text-[10px] text-muted-foreground truncate">
+                                                        {req.requestedBy?.displayName}
+                                                    </div>
+                                                    <Badge variant={req.status === 2 ? "secondary" : "outline"} className={`mt-1.5 text-[9px] px-1.5 py-0 h-4 ${req.status === 2 ? "bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400" : ""}`}>
                                                         {req.status === 2 ? "Approved" : "Pending"}
                                                     </Badge>
                                                 </div>
@@ -233,34 +241,34 @@ export default function AppsDashboard({ initialData }: { initialData: any[] }) {
             </TabsContent>
 
             {/* 5. UTILITY */}
-            <TabsContent value="maintenance" className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {maintenance.length === 0 && <div className="col-span-full text-muted-foreground p-4">No utility apps configured.</div>}
+            <TabsContent value="maintenance" className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {maintenance.length === 0 && <div className="col-span-full text-muted-foreground p-4 text-center text-sm">No utility apps configured.</div>}
                 {maintenance.map(app => (
                     <Card key={app.id}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle className="text-base">{app.name}</CardTitle>
+                        <CardHeader className="flex flex-row items-center justify-between pb-2 p-4">
+                            <CardTitle className="text-sm font-semibold">{app.name}</CardTitle>
                             <div className="flex items-center gap-2">
-                                {app.online ? <Badge variant="outline" className="text-green-600 bg-green-50">Online</Badge> : <Badge variant="destructive">Offline</Badge>}
+                                {app.online ? <span className="h-2 w-2 rounded-full bg-green-500"/> : <span className="h-2 w-2 rounded-full bg-red-500"/>}
                                 <OpenButton app={app} />
                             </div>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="p-4 pt-0">
                             {app.type === "prowlarr" && (
-                                <div className="text-center py-2">
-                                    <div className="text-2xl font-bold">{app.stats?.total || 0}</div>
-                                    <div className="text-xs text-muted-foreground">Total Indexers</div>
-                                    {app.stats?.failed > 0 && <div className="text-xs text-red-500 mt-1">{app.stats.failed} Failed</div>}
+                                <div className="text-center py-1">
+                                    <div className="text-xl font-bold">{app.stats?.total || 0}</div>
+                                    <div className="text-[10px] text-muted-foreground uppercase">Indexers</div>
+                                    {app.stats?.failed > 0 && <div className="text-[10px] text-red-500 mt-1">{app.stats.failed} Failed</div>}
                                 </div>
                             )}
                             {app.type === "bazarr" && (
-                                <div className="text-center py-2">
-                                    <div className="text-sm font-medium">Subtitles Service</div>
-                                    <div className="text-xs text-muted-foreground">Version: {app.stats?.version || "Unknown"}</div>
+                                <div className="text-center py-1">
+                                    <div className="text-xs font-medium">Subtitles Service</div>
+                                    <div className="text-[10px] text-muted-foreground">v{app.stats?.version || "?"}</div>
                                 </div>
                             )}
                              {!["prowlarr", "bazarr"].includes(app.type) && (
-                                <div className="text-center py-2 text-sm text-muted-foreground">
-                                    {app.online ? "Monitoring active." : "Check URL/API Key"}
+                                <div className="text-center py-1 text-xs text-muted-foreground">
+                                    {app.online ? "Monitoring active" : "Check Config"}
                                 </div>
                             )}
                         </CardContent>

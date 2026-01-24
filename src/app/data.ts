@@ -182,7 +182,7 @@ export async function fetchMediaAppsActivity() {
   const results = await Promise.all(apps.map(async (app) => {
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); 
+        const timeoutId = setTimeout(() => controller.abort(), 25000); 
         const cleanUrl = app.url.replace(/\/$/, "");
         let data: any = { id: app.id, type: app.type, name: app.name, online: false };
 
@@ -220,34 +220,29 @@ export async function fetchMediaAppsActivity() {
         }
 
         else if (app.type === "overseerr" || app.type === "jellyseerr") {
-             const res = await fetch(`${cleanUrl}/api/v1/request?take=10&skip=0&sort=added`, { 
+             const res = await fetch(`${cleanUrl}/api/v1/request?take=1000&skip=0&sort=added`, { 
                  headers: { "X-Api-Key": app.apiKey || "" },
                  signal: controller.signal, 
                  cache: "no-store" 
              });
              const json = await res.json();
 
-             let pendingCount = 0;
-             try {
-                const countRes = await fetch(`${cleanUrl}/api/v1/request/count`, { 
-                     headers: { "X-Api-Key": app.apiKey || "" },
-                     signal: controller.signal,
-                     cache: "no-store" 
-                });
-                if (countRes.ok) {
-                    const countJson = await countRes.json();
-                    pendingCount = countJson.pending || 0;
-                }
-             } catch(e) { pendingCount = json.pageInfo?.results || 0; }
+             // Removed old pendingCount fetch to calculate it manually below
              
              if (json.results) {
                  data.online = true;
-                 data.requests = await Promise.all(json.results.map(async (r: any) => {
+
+                 // Filter: Exclude Available (4) and Declined (3)
+                 const activeRequests = json.results.filter((r: any) => r.status !== 4 && r.status !== 3);
+
+                 data.requests = await Promise.all(activeRequests.map(async (r: any) => {
                      let title = "Unknown Title";
                      let poster = r.media?.posterPath || "";
+                     
                      try {
                          const mediaType = r.media?.mediaType || "movie";
                          const tmdbId = r.media?.tmdbId;
+                         
                          if (tmdbId) {
                             const detailRes = await fetch(`${cleanUrl}/api/v1/${mediaType}/${tmdbId}`, { 
                                 headers: { "X-Api-Key": app.apiKey || "" },
@@ -260,12 +255,24 @@ export async function fetchMediaAppsActivity() {
                             }
                          }
                      } catch (err) {}
+
+                     const status = (r.status === 5) ? 2 : r.status;
+                     const userDisplay = r.requestedBy?.displayName || r.requestedBy?.email || "Unknown User";
+                     const typeLabel = r.media?.mediaType === 'tv' ? '[TV]' : '[Movie]';
+
                      return {
-                         id: r.id, status: r.status, requestedBy: r.requestedBy,
-                         media: { ...r.media, title, posterPath: poster }
+                         id: r.id, 
+                         status: status,
+                         requestedBy: { displayName: userDisplay, avatar: r.requestedBy?.avatar },
+                         media: { ...r.media, title: `${typeLabel} ${title}`, posterPath: poster }
                      };
                  }));
-                 data.stats = { total: json.pageInfo?.results || 0, pending: pendingCount };
+                 
+                 // FIX: Manually calculate Pending (Status 1 only)
+                 // Processing (Status 5) is now considered Approved/Working
+                 const actualPending = activeRequests.filter((r: any) => r.status === 1).length;
+                 
+                 data.stats = { total: json.pageInfo?.results || 0, pending: actualPending };
              }
         }
 
@@ -273,9 +280,8 @@ export async function fetchMediaAppsActivity() {
             try {
                 const res = await fetch(`${cleanUrl}/api/system/status?apikey=${app.apiKey}`, { signal: controller.signal, cache: "no-store" });
                 const json = await res.json();
-                const ver = json.version || json.data?.version || "Online";
                 data.online = true;
-                data.stats = { version: ver };
+                data.stats = { version: json.version || json.data?.version || "Online" };
                 data.queue = [];
             } catch (e) { /* fail */ }
         }
@@ -285,43 +291,105 @@ export async function fetchMediaAppsActivity() {
             const json = await res.json();
             if (Array.isArray(json)) {
                 data.online = true;
-                
-                // Count items that are explicitly disabled
                 const failed = json.filter((i: any) => i.enable === false);
-                
-                data.stats = { 
-                    total: json.length, 
-                    failed: failed.length
-                };
-                
-                // Show the disabled indexers in the 'queue' list so you know which ones to fix
-                data.queue = failed.map((i: any) => ({
-                    title: i.name,
-                    status: "Disabled"
-                }));
+                data.stats = { total: json.length, failed: failed.length };
+                data.queue = failed.map((i: any) => ({ title: i.name, status: "Disabled" }));
             }
         }
 
         else if (app.type === "ombi") {
-             const res = await fetch(`${cleanUrl}/api/v1/Request/movie?apikey=${app.apiKey}`, { signal: controller.signal, cache: "no-store" });
-             const json = await res.json();
-             if (Array.isArray(json)) {
+             const [movieRes, tvRes] = await Promise.all([
+                 fetch(`${cleanUrl}/api/v1/Request/movie?apikey=${app.apiKey}`, { signal: controller.signal, cache: "no-store" }),
+                 fetch(`${cleanUrl}/api/v1/Request/tv?apikey=${app.apiKey}`, { signal: controller.signal, cache: "no-store" })
+             ]);
+
+             if (movieRes.ok || tvRes.ok) {
                  data.online = true;
-                 data.requests = json.map((r: any) => {
-                    let userDisplay = "Ombi User";
-                    if (r.requestedUser) {
-                        if (typeof r.requestedUser === "string") userDisplay = r.requestedUser;
-                        else if (typeof r.requestedUser === "object") userDisplay = r.requestedUser.userAlias || r.requestedUser.userName || "Ombi User";
-                    }
-                    return {
-                        id: r.id,
-                        status: r.approved ? 2 : 1, 
-                        requestedBy: { displayName: userDisplay },
-                        media: { title: r.title, posterPath: r.posterPath }
-                    };
-                 }).slice(0, 10);
-                 data.stats = { total: json.length, pending: json.filter((r:any) => !r.approved).length };
              }
+
+             const moviesRaw = movieRes.ok ? await movieRes.json() : [];
+             const tvRaw = tvRes.ok ? await tvRes.json() : [];
+
+             const movies = Array.isArray(moviesRaw) ? moviesRaw.map((m:any) => ({...m, uniqueType: 'movie'})) : [];
+             const tv = Array.isArray(tvRaw) ? tvRaw.map((t:any) => ({...t, uniqueType: 'tv'})) : [];
+
+             const allRequests = [...movies, ...tv];
+             
+             // Base Filter for List
+             const activeRequests = allRequests.filter((r: any) => {
+                 if (r.denied) return false;
+                 if (r.available) return false;
+                 if (r.requestStatus === 'Common.Available' || r.requestStatus === 'Available') return false;
+                 return true;
+             });
+
+             activeRequests.sort((a: any, b: any) => {
+                 const dateA = new Date(a.requestedDate || 0).getTime();
+                 const dateB = new Date(b.requestedDate || 0).getTime();
+                 return dateB - dateA; 
+             });
+
+             data.requests = activeRequests.map((r: any) => {
+                let userDisplay = "Ombi User";
+                
+                if (r.requestedUser && typeof r.requestedUser === 'object') {
+                    userDisplay = r.requestedUser.userAlias || r.requestedUser.userName || r.requestedUser.email || "Ombi User";
+                } 
+                
+                if (userDisplay === "Ombi User" && r.childRequests && r.childRequests.length > 0) {
+                     const childUser = r.childRequests[0]?.requestedUser;
+                     if (childUser && typeof childUser === 'object') {
+                         userDisplay = childUser.userAlias || childUser.userName || childUser.email || "Ombi User";
+                     }
+                }
+
+                let status = 1; 
+                if (r.approved) status = 2; 
+
+                if (status === 1 && r.childRequests && r.childRequests.length > 0) {
+                    if (r.childRequests.some((c: any) => c.approved)) {
+                        status = 2;
+                    }
+                }
+
+                const statusStr = r.requestStatus || r.status || "";
+                if (statusStr.includes("Processing") || statusStr.includes("Available")) {
+                    status = 2;
+                }
+
+                const typeLabel = r.uniqueType === 'tv' ? '[TV]' : '[Movie]';
+                const rawTitle = r.title || r.childRequests?.[0]?.title || "Unknown";
+
+                return {
+                    id: `${r.uniqueType}-${r.id}`, 
+                    status: status, 
+                    requestedBy: { displayName: userDisplay },
+                    media: { 
+                        title: `${typeLabel} ${rawTitle}`, 
+                        posterPath: r.posterPath 
+                    }
+                };
+             });
+             
+             // FIX: Count Pending correctly for Ombi Stats
+             // Exclude items that are "Processing" from the Pending count
+             const actualPending = activeRequests.filter((r: any) => {
+                 if (r.approved) return false; // Already Approved
+                 
+                 // Check Children for Approval
+                 if (r.childRequests && r.childRequests.some((c: any) => c.approved)) return false; 
+
+                 // Check Text Status for "Processing" or "Available"
+                 const statusStr = r.requestStatus || r.status || "";
+                 if (statusStr.includes("Processing") || statusStr.includes("Available")) return false;
+
+                 return true; // Actually Pending
+             }).length;
+
+             data.stats = { 
+                 total: allRequests.length, 
+                 pending: actualPending 
+             };
         }
 
         else if (app.type === "maintainerr") data.online = true; 
@@ -362,7 +430,6 @@ export async function fetchGlancesNodeDetails(id: string) {
           const quick = await safeFetch(version, "quicklook", controller.signal);
           if (!quick) throw new Error("Offline");
 
-          // NEW: Fetch BOTH "containers" (v4) and "docker" (v3)
           const [cpu, mem, load, fs, sensors, smart, network, uptime, processList, containers, docker] = await Promise.all([
               safeFetch(version, "cpu", controller.signal),
               safeFetch(version, "mem", controller.signal),
@@ -373,17 +440,15 @@ export async function fetchGlancesNodeDetails(id: string) {
               safeFetch(version, "network", controller.signal),
               safeFetch(version, "uptime", controller.signal),
               safeFetch(version, "processlist", controller.signal),
-              safeFetch(version, "containers", controller.signal), // Glances v4
-              safeFetch(version, "docker", controller.signal)      // Glances v3
+              safeFetch(version, "containers", controller.signal), 
+              safeFetch(version, "docker", controller.signal)      
           ]);
           
           clearTimeout(timeoutId);
 
-          // SMART MERGE: Use whichever one returned data
-          // Glances 'containers' often returns a Map/Object in JSON, so we value-ize it
           let dockerData = containers || docker || [];
           if (!Array.isArray(dockerData) && typeof dockerData === 'object') {
-              dockerData = Object.values(dockerData); // Flatten object to array
+              dockerData = Object.values(dockerData); 
           }
 
           const processes = toArray(processList)
@@ -406,7 +471,7 @@ export async function fetchGlancesNodeDetails(id: string) {
               quick: quick,
               network: toArray(network),
               processes: processes,
-              docker: dockerData // Now populated correctly!
+              docker: dockerData 
           };
       } catch (e) {
           clearTimeout(timeoutId);
@@ -424,8 +489,6 @@ export async function fetchGlancesNodeDetails(id: string) {
 
   return data;
 }
-
-// ... (keep the rest of the file the same)
 
 // --- SYNC LOGIC (VERBOSE DEBUGGING) ---
 
@@ -451,8 +514,13 @@ export async function performSync() {
         const baseUrl = instance.url.replace(/\/$/, "");
         logs.push(`Connecting to Tautulli: ${instance.name} (${baseUrl})...`);
         
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); 
+
         const url = `${baseUrl}/api/v2?apikey=${instance.apiKey}&cmd=get_users_table&order_column=last_seen&order_dir=desc&length=1000`;
-        const res = await fetch(url, { cache: 'no-store' });
+        
+        const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
+        clearTimeout(timeoutId); 
         
         if (res.status === 401) throw new Error("401 Unauthorized - Check API Key");
         if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
@@ -463,7 +531,8 @@ export async function performSync() {
         successfulFetches++;
         return users;
     } catch (err: any) { 
-        logs.push(`Failed to sync ${instance.name}: ${err.message}`);
+        const msg = err.name === 'AbortError' ? 'Connection Timed Out' : err.message;
+        logs.push(`Failed to sync ${instance.name}: ${msg}`);
         return []; 
     }
   };
@@ -502,38 +571,43 @@ export async function performSync() {
   let added = 0;
   let updated = 0;
 
-  for (const [plexId, userData] of mergedUsers) {
-      const lastWatchedDate = userData.lastSeen > 0 ? new Date(userData.lastSeen * 1000) : null;
-      
-      if (userData.lastSeen > oneYearAgo) {
-          const existing = await prisma.subscriber.findUnique({ where: { plexId } });
-          if (existing) { 
-              await prisma.subscriber.update({ 
-                  where: { id: existing.id }, 
-                  data: { 
-                      avatarUrl: userData.avatarUrl, 
-                      lastWatched: lastWatchedDate,
-                      lastWatchedTitle: userData.title
-                  } 
-              }); 
-              updated++;
-          } else { 
-              await prisma.subscriber.create({ 
-                  data: { 
-                      plexId: plexId, 
-                      name: userData.name, 
-                      email: userData.email, 
-                      avatarUrl: userData.avatarUrl, 
-                      lastWatched: lastWatchedDate, 
-                      lastWatchedTitle: userData.title,
-                      status: "Active", 
-                      isManual: false,
-                      nextPaymentDate: new Date(new Date().setDate(new Date().getDate() + 30)) 
-                  } 
-              }); 
-              added++;
+  try {
+      for (const [plexId, userData] of mergedUsers) {
+          const lastWatchedDate = userData.lastSeen > 0 ? new Date(userData.lastSeen * 1000) : null;
+          
+          if (userData.lastSeen > oneYearAgo) {
+              const existing = await prisma.subscriber.findUnique({ where: { plexId } });
+              if (existing) { 
+                  await prisma.subscriber.update({ 
+                      where: { id: existing.id }, 
+                      data: { 
+                          avatarUrl: userData.avatarUrl, 
+                          lastWatched: lastWatchedDate,
+                          lastWatchedTitle: userData.title
+                      } 
+                  }); 
+                  updated++;
+              } else { 
+                  await prisma.subscriber.create({ 
+                      data: { 
+                          plexId: plexId, 
+                          name: userData.name, 
+                          email: userData.email, 
+                          avatarUrl: userData.avatarUrl, 
+                          lastWatched: lastWatchedDate, 
+                          lastWatchedTitle: userData.title,
+                          status: "Active", 
+                          isManual: false,
+                          nextPaymentDate: new Date(new Date().setDate(new Date().getDate() + 30)) 
+                      } 
+                  }); 
+                  added++;
+              }
           }
       }
+  } catch (e: any) {
+      logs.push(`CRITICAL DB ERROR: ${e.message}`);
+      return { success: false, logs };
   }
 
   logs.push(`Sync Complete: ${added} added, ${updated} updated.`);
@@ -552,7 +626,6 @@ export async function fetchServiceHealth() {
       const res = await fetch(service.url, { method: "HEAD", cache: "no-store", signal: controller.signal });
       clearTimeout(timeoutId);
       
-      // Some apps return 401/403 (Unauthorized) which actually means they are ONLINE and reachable
       const isOnline = res.ok || res.status === 401 || res.status === 403;
       return { id: service.id, name: service.name, online: isOnline };
     } catch (e) { 
