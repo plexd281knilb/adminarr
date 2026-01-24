@@ -4,8 +4,7 @@ services:
     build: .
     image: ghcr.io/plexd281knilb/adminarr:latest
     restart: unless-stopped
-    # FIX: Run as root to prevent "Read-only database" errors
-    user: root 
+    user: root  # <--- THIS IS REQUIRED TO FIX THE DB LOCK
     ports:
       - "3000:3000"
     dns:
