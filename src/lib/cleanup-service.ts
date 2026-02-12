@@ -1,155 +1,177 @@
 import Database from 'better-sqlite3';
-import fs from 'fs';
 import path from 'path';
 
 // --- CONFIGURATION ---
 const DB_PATHS = {
-  main: '/mnt/remotes/Main_Appdata/plex/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
-  kids: '/mnt/user/appdata/KidsPlexServer/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
-  backup: '/mnt/user/appdata/MainPlexBackup/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db'
+  // Local Adminarr DB
+  ADMINARR: path.join(process.cwd(), 'data', 'dev.db'),
+  
+  // Plex Databases
+  MAIN: '/mnt/remotes/Main_Appdata/plex/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
+  KIDS: '/mnt/user/appdata/KidsPlexServer/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
+  BACKUP: '/mnt/user/appdata/MainPlexBackup/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db'
 };
 
-const ADMIN_DB_PATH = path.join(process.cwd(), 'data', 'dev.db');
+export function syncCleanupData() {
+  console.log('🔄 Starting Full Sync with Advanced Logic...');
+  const db = new Database(DB_PATHS.ADMINARR);
 
-// --- HELPER TO BUILD SQL FOR EACH DB ---
-const buildSelect = (dbPrefix: string = "") => {
-    const p = dbPrefix ? `${dbPrefix}.` : ""; 
-    
-    return `
-    SELECT 
-        miv.viewed_at,
-        datetime(${p}mi.created_at, 'unixepoch', 'localtime') AS added_at,
-        CASE 
-            WHEN ${p}mp.file LIKE ('%/Kid_TV/%')      THEN replace(${p}mp.file,'/Kid_TV/','/mnt/user/Kid_TV_Shows/')
-            WHEN ${p}mp.file LIKE ('%/tvshows/%')     THEN replace(${p}mp.file,'/Kid_TV/','/mnt/user/Kid_TV_Shows/')
-            WHEN ${p}mp.file LIKE ('%/tv/%')          THEN replace(${p}mp.file,'/tv/','/mnt/user/TV_Shows/')
-            
-            -- Special case: File says 'movies' but Library is 'Kids Movies'
-            WHEN ${p}mp.file LIKE ('%/movies/%') AND ${p}ls.name = 'Kids Movies' 
-                                                      THEN replace(${p}mp.file,'/Kid_Movies/','/mnt/user/Kid_Movies/')
-            
-            WHEN ${p}mp.file LIKE ('%/movies/%')      THEN replace(${p}mp.file,'/movies/','/mnt/user/Movies/')
-            WHEN ${p}mp.file LIKE ('%/4k_Movies/%')   THEN replace(${p}mp.file,'/4k_Movies/','/mnt/user/4k_Movies/')
-            WHEN ${p}mp.file LIKE ('%/Kid_Movies/%')  THEN replace(${p}mp.file,'/Kid_Movies/','/mnt/user/Kid_Movies/')
-            WHEN ${p}mp.file LIKE ('%/4k_tv_shows/%') THEN replace(${p}mp.file,'/4k_tv_shows/','/mnt/user/4k_TV_Shows/')
-            ELSE NULL
-        END AS file_path,
-        ${p}mi.title
-    FROM ${p}metadata_items AS ${p}mi
-    JOIN ${p}library_sections AS ${p}ls ON ${p}mi.library_section_id = ${p}ls.id
-    JOIN ${p}media_items AS ${p}mitem ON ${p}mitem.metadata_item_id = ${p}mi.id
-    JOIN ${p}media_parts AS ${p}mp ON ${p}mp.media_item_id = ${p}mitem.id
-    LEFT JOIN (
-        SELECT MAX(datetime(viewed_at, 'unixepoch', 'localtime')) AS viewed_at, guid
-        FROM ${p}metadata_item_views GROUP BY guid
-    ) miv ON miv.guid = ${p}mi.guid
-    WHERE ${p}ls.name IN ('Movies','TV Shows', 'Kids Movies', 'Kids TV Shows')
-    `;
-};
-
-export async function syncCleanupData() {
-  const db = new Database(ADMIN_DB_PATH);
-  
-  // 1. Ensure Tables Exist
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS cleanup_queue (
-      filepath TEXT PRIMARY KEY,
-      title TEXT,
-      last_active TEXT,
-      added_at TEXT
-    );
-    CREATE TABLE IF NOT EXISTS cleanup_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      filepath TEXT,
-      title TEXT,
-      last_active TEXT,
-      added_at TEXT,
-      deleted_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  // 2. AUTO-MIGRATION
-  const migrate = (table: string, col: string, type: string) => {
-    const info = db.pragma(`table_info(${table})`) as any[];
-    if (!info.some(c => c.name === col)) {
-        console.log(`[Migration] Updating ${table}: Adding missing column '${col}'...`);
-        db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
-    }
-  };
-  migrate('cleanup_queue', 'added_at', 'TEXT');
-  migrate('cleanup_history', 'added_at', 'TEXT');
-
-  let plexDB;
-  
   try {
-    // 3. QUERY PLEX (READ ONLY)
-    plexDB = new Database(DB_PATHS.main, { readonly: true, fileMustExist: true });
-    plexDB.exec(`ATTACH DATABASE '${DB_PATHS.kids}' AS kids`);
-    plexDB.exec(`ATTACH DATABASE '${DB_PATHS.backup}' AS backup`);
-
-    // Combine queries from Main, Kids, and Backup
-    const query = `
-      SELECT DISTINCT
-          MAX(IFNULL(viewed_at, added_at)) as last_active,
-          added_at,
-          file_path,
-          title
-      FROM (
-          ${buildSelect("")}       -- MAIN
-          UNION ALL
-          ${buildSelect("kids")}   -- KIDS
-          UNION ALL
-          ${buildSelect("backup")} -- BACKUP
-      ) ALL_Activity
-      WHERE file_path IS NOT NULL
-      GROUP BY file_path
-    `;
-
-    console.log("[Sync] Executing Plex Query...");
-    const currentPlexItems = plexDB.prepare(query).all();
-    console.log(`[Sync] Found ${currentPlexItems.length} items from Plex.`);
-
-    plexDB.close();
-
-    // 4. SYNC WITH LOCAL DB
-    const storedItems = db.prepare('SELECT filepath, title, last_active, added_at FROM cleanup_queue').all();
-    const currentFileSet = new Set(currentPlexItems.map((i: any) => i.file_path));
-
-    const insertHistory = db.prepare('INSERT INTO cleanup_history (filepath, title, last_active, added_at) VALUES (?, ?, ?, ?)');
-    const deleteQueue = db.prepare('DELETE FROM cleanup_queue WHERE filepath = ?');
-
-    const runTransaction = db.transaction((items) => {
-      for (const item of items) {
-        if (!currentFileSet.has(item.filepath)) {
-          // If file is gone from Plex AND gone from disk -> History
-          if (!fs.existsSync(item.filepath)) {
-            insertHistory.run(item.filepath, item.title, item.last_active, item.added_at);
-            deleteQueue.run(item.filepath);
-          }
-        }
-      }
-    });
-
-    runTransaction(storedItems);
-
-    const upsertQueue = db.prepare(`
-      INSERT OR REPLACE INTO cleanup_queue (filepath, title, last_active, added_at)
-      VALUES (@file_path, @title, @last_active, @added_at)
+    // 1. Prepare the Local Table (Fresh Start)
+    db.exec('DROP TABLE IF EXISTS cleanup_queue');
+    db.exec(`
+      CREATE TABLE cleanup_queue (
+        guid TEXT,
+        added_at TEXT,
+        last_active TEXT,
+        viewed_at TEXT,
+        filepath TEXT,
+        original_file TEXT,
+        source TEXT
+      );
     `);
 
-    const updateTransaction = db.transaction((items) => {
-        for (const item of items) upsertQueue.run(item);
-    });
+    // 2. Attach External Databases (READ-ONLY + IMMUTABLE Mode for Safety)
+    // This prevents the "malformed database schema" errors by ignoring the WAL files
+    const attachQuery = `
+      ATTACH DATABASE 'file:${DB_PATHS.MAIN}?mode=ro&immutable=1' AS main_plex;
+      ATTACH DATABASE 'file:${DB_PATHS.KIDS}?mode=ro&immutable=1' AS kids;
+      ATTACH DATABASE 'file:${DB_PATHS.BACKUP}?mode=ro&immutable=1' AS backup;
+    `;
+    db.exec(attachQuery);
 
-    updateTransaction(currentPlexItems);
+    // 3. The "Big Logic" Query
+    // Matches your verified Bash script logic
+    const syncQuery = `
+      INSERT INTO cleanup_queue (guid, added_at, last_active, viewed_at, filepath, original_file, source)
+      SELECT 
+        guid, 
+        added_at, 
+        MAX(last_active_dt) as last_active, 
+        MAX(viewed_at) as viewed_at, 
+        file_path, 
+        original_file, 
+        source
+      FROM (
+        -- MAIN SERVER
+        SELECT 
+            CASE WHEN mi.guid LIKE '%local%' THEN hints ELSE mi.guid END AS guid,
+            datetime(mi.created_at, 'unixepoch', 'localtime') AS added_at,
+            IFNULL(miv.viewed_at, datetime(mi.created_at, 'unixepoch', 'localtime')) AS last_active_dt,
+            datetime(miv.viewed_at, 'unixepoch', 'localtime') AS viewed_at,
+            CASE 
+                WHEN mp.file LIKE '%/Kid_TV/%'      THEN replace(mp.file,'/Kid_TV/','/mnt/user/Kid_TV_Shows/')
+                WHEN mp.file LIKE '%/Kid_tvshows/%' THEN replace(mp.file,'/Kid_tvshows/','/mnt/user/Kid_TV_Shows/')
+                WHEN mp.file LIKE '%/4k_tv_shows/%' THEN replace(mp.file,'/4k_tv_shows/','/mnt/user/4k_TV_Shows/')
+                WHEN mp.file LIKE '%/tvshows/%'     THEN replace(mp.file,'/tvshows/','/mnt/user/Kid_TV_Shows/')
+                WHEN mp.file LIKE '%/tv_shows/%'    THEN replace(mp.file,'/tv_shows/','/mnt/user/TV_Shows/')
+                WHEN mp.file LIKE '%/tv/%'          THEN replace(mp.file,'/tv/','/mnt/user/TV_Shows/')
+                WHEN mp.file LIKE '%/4k_Movies/%'   THEN replace(mp.file,'/4k_Movies/','/mnt/user/4k_Movies/')
+                WHEN mp.file LIKE '%/4k_movies/%'   THEN replace(mp.file,'/4k_movies/','/mnt/user/4k_Movies/')
+                WHEN mp.file LIKE '%/Kid_Movies/%'  THEN replace(mp.file,'/Kid_Movies/','/mnt/user/Kid_Movies/')
+                WHEN mp.file LIKE '%/Kid_movies/%'  THEN replace(mp.file,'/Kid_movies/','/mnt/user/Kid_Movies/')
+                WHEN mp.file LIKE '%/movies/%' AND ls.name = 'Kids Movies' THEN replace(mp.file,'/movies/','/mnt/user/Kid_Movies/')
+                WHEN mp.file LIKE '%/movies/%'      THEN replace(mp.file,'/movies/','/mnt/user/Movies/')
+                ELSE mp.file
+            END AS file_path,
+            mp.file AS original_file,
+            'MAIN' as source
+        FROM main_plex.metadata_items AS mi
+        JOIN main_plex.library_sections AS ls ON mi.library_section_id = ls.id
+        JOIN main_plex.media_items AS mitem ON mitem.metadata_item_id = mi.id
+        JOIN main_plex.media_parts AS mp ON mp.media_item_id = mitem.id
+        LEFT JOIN (SELECT MAX(datetime(viewed_at, 'unixepoch', 'localtime')) AS viewed_at, guid FROM main_plex.metadata_item_views GROUP BY guid) miv ON miv.guid = mi.guid
+        WHERE ls.name IN ('Movies','TV Shows', 'Kids Movies', 'Kids TV Shows')
+
+        UNION ALL
+
+        -- KIDS SERVER
+        SELECT 
+            CASE WHEN mi.guid LIKE '%local%' THEN hints ELSE mi.guid END AS guid,
+            datetime(mi.created_at, 'unixepoch', 'localtime') AS added_at,
+            IFNULL(miv.viewed_at, datetime(mi.created_at, 'unixepoch', 'localtime')) AS last_active_dt,
+            datetime(miv.viewed_at, 'unixepoch', 'localtime') AS viewed_at,
+            CASE 
+                WHEN mp.file LIKE '%/Kid_TV/%'      THEN replace(mp.file,'/Kid_TV/','/mnt/user/Kid_TV_Shows/')
+                WHEN mp.file LIKE '%/Kid_tvshows/%' THEN replace(mp.file,'/Kid_tvshows/','/mnt/user/Kid_TV_Shows/')
+                WHEN mp.file LIKE '%/4k_tv_shows/%' THEN replace(mp.file,'/4k_tv_shows/','/mnt/user/4k_TV_Shows/')
+                WHEN mp.file LIKE '%/tvshows/%'     THEN replace(mp.file,'/tvshows/','/mnt/user/Kid_TV_Shows/')
+                WHEN mp.file LIKE '%/tv_shows/%'    THEN replace(mp.file,'/tv_shows/','/mnt/user/TV_Shows/')
+                WHEN mp.file LIKE '%/tv/%'          THEN replace(mp.file,'/tv/','/mnt/user/TV_Shows/')
+                WHEN mp.file LIKE '%/4k_Movies/%'   THEN replace(mp.file,'/4k_Movies/','/mnt/user/4k_Movies/')
+                WHEN mp.file LIKE '%/4k_movies/%'   THEN replace(mp.file,'/4k_movies/','/mnt/user/4k_Movies/')
+                WHEN mp.file LIKE '%/Kid_Movies/%'  THEN replace(mp.file,'/Kid_Movies/','/mnt/user/Kid_Movies/')
+                WHEN mp.file LIKE '%/Kid_movies/%'  THEN replace(mp.file,'/Kid_movies/','/mnt/user/Kid_Movies/')
+                WHEN mp.file LIKE '%/movies/%' AND ls.name = 'Kids Movies' THEN replace(mp.file,'/movies/','/mnt/user/Kid_Movies/')
+                WHEN mp.file LIKE '%/movies/%'      THEN replace(mp.file,'/movies/','/mnt/user/Movies/')
+                ELSE mp.file
+            END AS file_path,
+            mp.file AS original_file,
+            'KIDS' as source
+        FROM kids.metadata_items AS mi
+        JOIN kids.library_sections AS ls ON mi.library_section_id = ls.id
+        JOIN kids.media_items AS mitem ON mitem.metadata_item_id = mi.id
+        JOIN kids.media_parts AS mp ON mp.media_item_id = mitem.id
+        LEFT JOIN (SELECT MAX(datetime(viewed_at, 'unixepoch', 'localtime')) AS viewed_at, guid FROM kids.metadata_item_views GROUP BY guid) miv ON miv.guid = mi.guid
+        WHERE ls.name IN ('Movies','TV Shows', 'Kids Movies', 'Kids TV Shows')
+
+        UNION ALL
+
+        -- BACKUP SERVER
+        SELECT 
+            CASE WHEN mi.guid LIKE '%local%' THEN hints ELSE mi.guid END AS guid,
+            datetime(mi.created_at, 'unixepoch', 'localtime') AS added_at,
+            IFNULL(miv.viewed_at, datetime(mi.created_at, 'unixepoch', 'localtime')) AS last_active_dt,
+            datetime(miv.viewed_at, 'unixepoch', 'localtime') AS viewed_at,
+            CASE 
+                WHEN mp.file LIKE '%/Kid_TV/%'      THEN replace(mp.file,'/Kid_TV/','/mnt/user/Kid_TV_Shows/')
+                WHEN mp.file LIKE '%/4k_movies/%'   THEN replace(mp.file,'/4k_movies/','/mnt/user/4k_Movies/')
+                WHEN mp.file LIKE '%Kid_movies%'    THEN replace(mp.file,'/Kid_movies/','/mnt/user/Kid_Movies/')
+                WHEN mp.file LIKE '%/Kid_tvshows/%' THEN replace(mp.file,'/Kid_tvshows/','/mnt/user/Kid_TV_Shows/')
+                WHEN mp.file LIKE '%/4k_tv_shows/%' THEN replace(mp.file,'/4k_tv_shows/','/mnt/user/4k_TV_Shows/')
+                WHEN mp.file LIKE '%/tvshows/%'     THEN replace(mp.file,'/tvshows/','/mnt/user/Kid_TV_Shows/')
+                WHEN mp.file LIKE '%/tv_shows/%'    THEN replace(mp.file,'/tv_shows/','/mnt/user/TV_Shows/')
+                WHEN mp.file LIKE '%/tv/%'          THEN replace(mp.file,'/tv/','/mnt/user/TV_Shows/')
+                WHEN mp.file LIKE '%/4k_Movies/%'   THEN replace(mp.file,'/4k_Movies/','/mnt/user/4k_Movies/')
+                WHEN mp.file LIKE '%/Kid_Movies/%'  THEN replace(mp.file,'/Kid_Movies/','/mnt/user/Kid_Movies/')
+                WHEN mp.file LIKE '%/movies/%' AND ls.name = 'Kids Movies' THEN replace(mp.file,'/movies/','/mnt/user/Kid_Movies/')
+                WHEN mp.file LIKE '%/movies/%'      THEN replace(mp.file,'/movies/','/mnt/user/Movies/')
+                ELSE mp.file
+            END AS file_path,
+            mp.file AS original_file,
+            'BACKUP' as source
+        FROM backup.metadata_items AS mi
+        JOIN backup.library_sections AS ls ON mi.library_section_id = ls.id
+        JOIN backup.media_items AS mitem ON mitem.metadata_item_id = mi.id
+        JOIN backup.media_parts AS mp ON mp.media_item_id = mitem.id
+        LEFT JOIN (SELECT MAX(datetime(viewed_at, 'unixepoch', 'localtime')) AS viewed_at, guid FROM backup.metadata_item_views GROUP BY guid) miv ON miv.guid = mi.guid
+        WHERE ls.name IN ('Movies','TV Shows', 'Kids Movies', 'Kids TV Shows')
+      )
+      WHERE file_path IS NOT NULL 
+        AND file_path NOT LIKE '%placeholders%'
+      GROUP BY guid, file_path;
+    `;
     
-    return { success: true, count: currentPlexItems.length };
+    db.exec(syncQuery);
+    
+    // Get count for return
+    const result = db.prepare('SELECT count(*) as count FROM cleanup_queue').get() as { count: number };
+    console.log(`✅ Sync Complete! ${result.count} items in cleanup queue.`);
+    
+    return { success: true, count: result.count };
 
   } catch (error) {
-    console.error("Sync Error:", error);
+    console.error('❌ Sync Failed:', error);
     throw error;
   } finally {
+    // 4. Clean up connections
+    try {
+      db.exec("DETACH DATABASE main_plex");
+      db.exec("DETACH DATABASE kids");
+      db.exec("DETACH DATABASE backup");
+    } catch (e) {
+      // Ignore detach errors if they weren't attached
+    }
     if (db.open) db.close();
-    if (plexDB && plexDB.open) plexDB.close();
   }
 }
