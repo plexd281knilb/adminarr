@@ -20,7 +20,8 @@ import {
   LogOut,
   ExternalLink,
   Shield,
-  LifeBuoy // <--- New Icon
+  LifeBuoy,
+  Trash2 // <--- 1. Import Trash Icon
 } from "lucide-react"
 
 export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
@@ -65,6 +66,15 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
                 Apps
               </Button>
             </Link>
+
+            {/* --- 2. NEW CLEANUP LINK (Desktop) --- */}
+            <Link href="/cleanup">
+              <Button variant={pathname.startsWith("/cleanup") ? "secondary" : "ghost"} className="w-full justify-start">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Cleanup
+              </Button>
+            </Link>
+            {/* ------------------------------------ */}
             
             <Link href="/users">
               <Button variant={pathname.startsWith("/users") ? "secondary" : "ghost"} className="w-full justify-start">
@@ -73,7 +83,6 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
               </Button>
             </Link>
 
-            {/* NEW TICKET LINK */}
             <Link href="/admin/tickets">
               <Button variant={pathname.startsWith("/admin/tickets") ? "secondary" : "ghost"} className="w-full justify-start">
                 <LifeBuoy className="mr-2 h-4 w-4" />
@@ -172,12 +181,20 @@ export function MobileSidebar() {
                       <Layers className="mr-2 h-4 w-4" /> Apps
                     </Button>
                   </Link>
+
+                  {/* --- 3. NEW CLEANUP LINK (Mobile) --- */}
+                  <Link href="/cleanup" onClick={() => setIsOpen(false)}>
+                    <Button variant={pathname.startsWith("/cleanup") ? "secondary" : "ghost"} className="w-full justify-start">
+                      <Trash2 className="mr-2 h-4 w-4" /> Cleanup
+                    </Button>
+                  </Link>
+                  {/* ---------------------------------- */}
+
                   <Link href="/users" onClick={() => setIsOpen(false)}>
                     <Button variant={pathname.startsWith("/users") ? "secondary" : "ghost"} className="w-full justify-start">
                       <Users className="mr-2 h-4 w-4" /> User List
                     </Button>
                   </Link>
-                  {/* NEW MOBILE LINK */}
                   <Link href="/admin/tickets" onClick={() => setIsOpen(false)}>
                     <Button variant={pathname.startsWith("/admin/tickets") ? "secondary" : "ghost"} className="w-full justify-start">
                       <LifeBuoy className="mr-2 h-4 w-4" /> Support Tickets

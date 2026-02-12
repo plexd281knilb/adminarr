@@ -8,7 +8,8 @@ import {
     Users, 
     Settings, 
     Activity, 
-    Layers // <--- New Icon for Apps
+    Layers,
+    Trash2 // <--- 1. Import the Trash Icon
 } from "lucide-react";
 
 export function MainNav({
@@ -54,6 +55,19 @@ export function MainNav({
         <Layers className="h-4 w-4" />
         Apps
       </Link>
+
+      {/* --- 2. NEW CLEANUP LINK --- */}
+      <Link
+        href="/cleanup"
+        className={cn(
+          "text-sm font-medium transition-colors hover:text-primary flex items-center gap-2",
+          pathname.startsWith("/cleanup") ? "text-primary" : "text-muted-foreground"
+        )}
+      >
+        <Trash2 className="h-4 w-4" />
+        Cleanup
+      </Link>
+      {/* --------------------------- */}
 
       <Link
         href="/users"

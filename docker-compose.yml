@@ -15,3 +15,5 @@ services:
       - NODE_ENV=production
     volumes:
       - ./data:/app/data
+      - /mnt/user:/mnt/user
+      - /mnt/remotes:/mnt/remotes
