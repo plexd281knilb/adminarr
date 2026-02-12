@@ -56,7 +56,7 @@ export default function CleanupPage() {
           <thead className="bg-gray-800 text-gray-400 uppercase text-xs">
             <tr>
               <th className="p-4">Title / Path</th>
-              <th className="p-4">Date Added</th>     {/* NEW COLUMN */}
+              <th className="p-4">Date Added</th>
               <th className="p-4">Last Watched</th>
               {activeTab === 'history' && <th className="p-4 text-red-400">Deleted On</th>}
             </tr>
@@ -71,11 +71,9 @@ export default function CleanupPage() {
                     <div className="text-gray-500 text-xs">{item.filepath}</div>
                 </td>
                 <td className="p-4 text-sm text-gray-400 whitespace-nowrap font-mono">
-                    {/* Format Added Date */}
                     {item.added_at ? new Date(item.added_at).toLocaleDateString() : "-"}
                 </td>
                 <td className="p-4 text-sm text-yellow-500 whitespace-nowrap font-mono">
-                    {/* Format Last Watched */}
                     {item.last_active ? new Date(item.last_active).toLocaleDateString() : "Never"}
                 </td>
                 {activeTab === 'history' && (
