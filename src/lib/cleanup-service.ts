@@ -3,13 +3,18 @@ import path from 'path';
 
 // --- CONFIGURATION ---
 const DB_PATHS = {
-  // Local Adminarr DB
   ADMINARR: path.join(process.cwd(), 'data', 'dev.db'),
-  
-  // Plex Databases
   MAIN: '/mnt/remotes/Main_Appdata/plex/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
   KIDS: '/mnt/user/appdata/KidsPlexServer/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
   BACKUP: '/mnt/user/appdata/MainPlexBackup/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db'
+};
+
+// --- HELPER: Convert Path to SQLite URI ---
+// This fixes the SQLITE_CANTOPEN error by encoding spaces (e.g., "Application Support" -> "Application%20Support")
+const getSafeURI = (dbPath: string) => {
+  // Replace spaces with %20. We use file:// prefix for absolute paths.
+  const encodedPath = dbPath.replace(/ /g, '%20');
+  return `file://${encodedPath}?mode=ro&immutable=1`;
 };
 
 export function syncCleanupData() {
@@ -17,7 +22,7 @@ export function syncCleanupData() {
   const db = new Database(DB_PATHS.ADMINARR);
 
   try {
-    // 1. Prepare the Local Table (Fresh Start)
+    // 1. Prepare the Local Table
     db.exec('DROP TABLE IF EXISTS cleanup_queue');
     db.exec(`
       CREATE TABLE cleanup_queue (
@@ -31,17 +36,18 @@ export function syncCleanupData() {
       );
     `);
 
-    // 2. Attach External Databases (READ-ONLY + IMMUTABLE Mode for Safety)
-    // This prevents the "malformed database schema" errors by ignoring the WAL files
+    // 2. Attach External Databases using Safe URIs
+    // We use the helper function here to ensure spaces are handled correctly
     const attachQuery = `
-      ATTACH DATABASE 'file://${DB_PATHS.MAIN}?mode=ro&immutable=1' AS main_plex;
-      ATTACH DATABASE 'file://${DB_PATHS.KIDS}?mode=ro&immutable=1' AS kids;
-      ATTACH DATABASE 'file://${DB_PATHS.BACKUP}?mode=ro&immutable=1' AS backup;
+      ATTACH DATABASE '${getSafeURI(DB_PATHS.MAIN)}' AS main_plex;
+      ATTACH DATABASE '${getSafeURI(DB_PATHS.KIDS)}' AS kids;
+      ATTACH DATABASE '${getSafeURI(DB_PATHS.BACKUP)}' AS backup;
     `;
+    
+    console.log("🔌 Attaching Databases...");
     db.exec(attachQuery);
 
-    // 3. The "Big Logic" Query
-    // Matches your verified Bash script logic
+    // 3. The "Big Logic" Query (Unchanged)
     const syncQuery = `
       INSERT INTO cleanup_queue (guid, added_at, last_active, viewed_at, filepath, original_file, source)
       SELECT 
@@ -152,9 +158,9 @@ export function syncCleanupData() {
       GROUP BY guid, file_path;
     `;
     
+    console.log("🚀 Executing Sync...");
     db.exec(syncQuery);
     
-    // Get count for return
     const result = db.prepare('SELECT count(*) as count FROM cleanup_queue').get() as { count: number };
     console.log(`✅ Sync Complete! ${result.count} items in cleanup queue.`);
     
@@ -164,14 +170,11 @@ export function syncCleanupData() {
     console.error('❌ Sync Failed:', error);
     throw error;
   } finally {
-    // 4. Clean up connections
     try {
       db.exec("DETACH DATABASE main_plex");
       db.exec("DETACH DATABASE kids");
       db.exec("DETACH DATABASE backup");
-    } catch (e) {
-      // Ignore detach errors if they weren't attached
-    }
+    } catch (e) { }
     if (db.open) db.close();
   }
 }
