@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 
 // --- CONFIGURATION ---
-// UPDATED WITH YOUR NEW PATHS
 const DB_PATHS = {
   main: '/mnt/remotes/Main_Appdata/plex/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
   kids: '/mnt/user/appdata/KidsPlexServer/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
@@ -12,28 +11,36 @@ const DB_PATHS = {
 
 const ADMIN_DB_PATH = path.join(process.cwd(), 'data', 'dev.db');
 
-// --- PLEX QUERY ---
-const CORE_SELECT = `
+// --- HELPER TO BUILD SQL FOR EACH DB ---
+// This ensures we join 'kids.media_items' with 'kids.media_parts', not mixing DBs.
+const buildSelect = (dbPrefix: string = "") => {
+    const p = dbPrefix ? `${dbPrefix}.` : ""; // e.g. "kids." or ""
+    
+    return `
     SELECT 
-        MAX(datetime(viewed_at, 'unixepoch', 'localtime')) as last_viewed,
-        datetime(mi.created_at, 'unixepoch', 'localtime') AS added_at,
+        miv.viewed_at,
+        datetime(${p}mi.created_at, 'unixepoch', 'localtime') AS added_at,
         CASE 
-            WHEN mp.file LIKE ('%/Kid_TV/%')      THEN replace(mp.file,'/Kid_TV/','/mnt/user/Kid_TV_Shows/')
-            WHEN mp.file LIKE ('%/tv/%')          THEN replace(mp.file,'/tv/','/mnt/user/TV_Shows/')
-            WHEN mp.file LIKE ('%/movies/%')      THEN replace(mp.file,'/movies/','/mnt/user/Movies/')
-            WHEN mp.file LIKE ('%/4k_Movies/%')   THEN replace(mp.file,'/4k_Movies/','/mnt/user/4k_Movies/')
-            WHEN mp.file LIKE ('%/Kid_Movies/%')  THEN replace(mp.file,'/Kid_Movies/','/mnt/user/Kid_Movies/')
-            WHEN mp.file LIKE ('%/4k_tv_shows/%') THEN replace(mp.file,'/4k_tv_shows/','/mnt/user/4k_TV_Shows/')
-            ELSE mp.file
+            WHEN ${p}mp.file LIKE ('%/Kid_TV/%')      THEN replace(${p}mp.file,'/Kid_TV/','/mnt/user/Kid_TV_Shows/')
+            WHEN ${p}mp.file LIKE ('%/tv/%')          THEN replace(${p}mp.file,'/tv/','/mnt/user/TV_Shows/')
+            WHEN ${p}mp.file LIKE ('%/movies/%')      THEN replace(${p}mp.file,'/movies/','/mnt/user/Movies/')
+            WHEN ${p}mp.file LIKE ('%/4k_Movies/%')   THEN replace(${p}mp.file,'/4k_Movies/','/mnt/user/4k_Movies/')
+            WHEN ${p}mp.file LIKE ('%/Kid_Movies/%')  THEN replace(${p}mp.file,'/Kid_Movies/','/mnt/user/Kid_Movies/')
+            WHEN ${p}mp.file LIKE ('%/4k_tv_shows/%') THEN replace(${p}mp.file,'/4k_tv_shows/','/mnt/user/4k_TV_Shows/')
+            ELSE ${p}mp.file
         END AS file_path,
-        mi.title
-    FROM metadata_items AS mi
-    JOIN library_sections AS ls ON mi.library_section_id = ls.id
-    JOIN media_items AS mitem ON mitem.metadata_item_id = mi.id
-    JOIN media_parts AS mp ON mp.media_item_id = mitem.id
-    LEFT JOIN metadata_item_views AS miv ON miv.guid = mi.guid
-    WHERE ls.name IN ('Movies','TV Shows')
-`;
+        ${p}mi.title
+    FROM ${p}metadata_items AS ${p}mi
+    JOIN ${p}library_sections AS ${p}ls ON ${p}mi.library_section_id = ${p}ls.id
+    JOIN ${p}media_items AS ${p}mitem ON ${p}mitem.metadata_item_id = ${p}mi.id
+    JOIN ${p}media_parts AS ${p}mp ON ${p}mp.media_item_id = ${p}mitem.id
+    LEFT JOIN (
+        SELECT MAX(datetime(viewed_at, 'unixepoch', 'localtime')) AS viewed_at, guid
+        FROM ${p}metadata_item_views GROUP BY guid
+    ) miv ON miv.guid = ${p}mi.guid
+    WHERE ${p}ls.name IN ('Movies','TV Shows')
+    `;
+};
 
 export async function syncCleanupData() {
   const db = new Database(ADMIN_DB_PATH);
@@ -64,41 +71,42 @@ export async function syncCleanupData() {
         db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
     }
   };
-
   migrate('cleanup_queue', 'added_at', 'TEXT');
   migrate('cleanup_history', 'added_at', 'TEXT');
 
-  // --- SYNC LOGIC ---
   let plexDB;
   
   try {
-    // 1. QUERY PLEX (READ ONLY)
-    // Note: We use 'fileMustExist: true' to ensure we fail fast if the path is still wrong
+    // 3. QUERY PLEX (READ ONLY)
     plexDB = new Database(DB_PATHS.main, { readonly: true, fileMustExist: true });
     plexDB.exec(`ATTACH DATABASE '${DB_PATHS.kids}' AS kids`);
     plexDB.exec(`ATTACH DATABASE '${DB_PATHS.backup}' AS backup`);
 
+    // Combine queries from Main, Kids, and Backup
     const query = `
       SELECT DISTINCT
-          MAX(IFNULL(last_viewed, added_at)) as last_active,
+          MAX(IFNULL(viewed_at, added_at)) as last_active,
           added_at,
           file_path,
           title
       FROM (
-          ${CORE_SELECT}
+          ${buildSelect("")}       -- MAIN
           UNION ALL
-          ${CORE_SELECT.replace(/FROM metadata_items/g, 'FROM kids.metadata_items')}
+          ${buildSelect("kids")}   -- KIDS
           UNION ALL
-          ${CORE_SELECT.replace(/FROM metadata_items/g, 'FROM backup.metadata_items')}
+          ${buildSelect("backup")} -- BACKUP
       ) ALL_Activity
       WHERE file_path IS NOT NULL
       GROUP BY file_path
     `;
 
+    console.log("[Sync] Executing Plex Query...");
     const currentPlexItems = plexDB.prepare(query).all();
+    console.log(`[Sync] Found ${currentPlexItems.length} items from Plex.`);
+
     plexDB.close();
 
-    // 2. DETECT DELETIONS
+    // 4. SYNC WITH LOCAL DB
     const storedItems = db.prepare('SELECT filepath, title, last_active, added_at FROM cleanup_queue').all();
     const currentFileSet = new Set(currentPlexItems.map((i: any) => i.file_path));
 
@@ -108,6 +116,7 @@ export async function syncCleanupData() {
     const runTransaction = db.transaction((items) => {
       for (const item of items) {
         if (!currentFileSet.has(item.filepath)) {
+          // If file is gone from Plex AND gone from disk -> History
           if (!fs.existsSync(item.filepath)) {
             insertHistory.run(item.filepath, item.title, item.last_active, item.added_at);
             deleteQueue.run(item.filepath);
@@ -118,7 +127,6 @@ export async function syncCleanupData() {
 
     runTransaction(storedItems);
 
-    // 3. UPDATE QUEUE
     const upsertQueue = db.prepare(`
       INSERT OR REPLACE INTO cleanup_queue (filepath, title, last_active, added_at)
       VALUES (@file_path, @title, @last_active, @added_at)
@@ -130,7 +138,7 @@ export async function syncCleanupData() {
 
     updateTransaction(currentPlexItems);
     
-    return { success: true };
+    return { success: true, count: currentPlexItems.length };
 
   } catch (error) {
     console.error("Sync Error:", error);
