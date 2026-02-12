@@ -10,17 +10,16 @@ export async function GET(request: Request) {
   const type = searchParams.get('type');
   
   // Open DB Read-Only
-  // If this fails, make sure the ./data/dev.db file exists (created by the cron job)
   let db;
   try {
       db = new Database(ADMIN_DB_PATH, { readonly: true, fileMustExist: false });
   } catch (e) {
-      // If DB doesn't exist yet (first run), return empty list instead of crashing
       return NextResponse.json([]);
   }
 
   try {
-    let rows = [];
+    // FIX: Explicitly type the array as any[]
+    let rows: any[] = [];
     
     // Check if tables exist before querying
     const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='cleanup_queue'").get();
