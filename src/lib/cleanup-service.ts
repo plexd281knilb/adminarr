@@ -3,10 +3,11 @@ import fs from 'fs';
 import path from 'path';
 
 // --- CONFIGURATION ---
+// UPDATED WITH YOUR NEW PATHS
 const DB_PATHS = {
-  main: '/mnt/user/appdata/plex/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
-  kids: '/mnt/remotes/Kid_Server_Appdata/KidsPlexServer/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
-  backup: '/mnt/remotes/Kid_Server_Appdata/MainPlexBackup/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db'
+  main: '/mnt/remotes/Main_Appdata/plex/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
+  kids: '/mnt/user/appdata/KidsPlexServer/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db',
+  backup: '/mnt/user/appdata/MainPlexBackup/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db'
 };
 
 const ADMIN_DB_PATH = path.join(process.cwd(), 'data', 'dev.db');
@@ -55,8 +56,7 @@ export async function syncCleanupData() {
     );
   `);
 
-  // 2. AUTO-MIGRATION (The "Safe Way")
-  // Checks if 'added_at' is missing and adds it without deleting data
+  // 2. AUTO-MIGRATION
   const migrate = (table: string, col: string, type: string) => {
     const info = db.pragma(`table_info(${table})`) as any[];
     if (!info.some(c => c.name === col)) {
@@ -68,11 +68,13 @@ export async function syncCleanupData() {
   migrate('cleanup_queue', 'added_at', 'TEXT');
   migrate('cleanup_history', 'added_at', 'TEXT');
 
-  // --- STANDARD SYNC LOGIC BELOW ---
+  // --- SYNC LOGIC ---
   let plexDB;
   
   try {
-    plexDB = new Database(DB_PATHS.main, { readonly: true });
+    // 1. QUERY PLEX (READ ONLY)
+    // Note: We use 'fileMustExist: true' to ensure we fail fast if the path is still wrong
+    plexDB = new Database(DB_PATHS.main, { readonly: true, fileMustExist: true });
     plexDB.exec(`ATTACH DATABASE '${DB_PATHS.kids}' AS kids`);
     plexDB.exec(`ATTACH DATABASE '${DB_PATHS.backup}' AS backup`);
 
@@ -96,6 +98,7 @@ export async function syncCleanupData() {
     const currentPlexItems = plexDB.prepare(query).all();
     plexDB.close();
 
+    // 2. DETECT DELETIONS
     const storedItems = db.prepare('SELECT filepath, title, last_active, added_at FROM cleanup_queue').all();
     const currentFileSet = new Set(currentPlexItems.map((i: any) => i.file_path));
 
@@ -106,7 +109,6 @@ export async function syncCleanupData() {
       for (const item of items) {
         if (!currentFileSet.has(item.filepath)) {
           if (!fs.existsSync(item.filepath)) {
-            // Now safe to insert added_at because we migrated the table above
             insertHistory.run(item.filepath, item.title, item.last_active, item.added_at);
             deleteQueue.run(item.filepath);
           }
@@ -116,6 +118,7 @@ export async function syncCleanupData() {
 
     runTransaction(storedItems);
 
+    // 3. UPDATE QUEUE
     const upsertQueue = db.prepare(`
       INSERT OR REPLACE INTO cleanup_queue (filepath, title, last_active, added_at)
       VALUES (@file_path, @title, @last_active, @added_at)
