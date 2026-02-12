@@ -34,9 +34,9 @@ export function syncCleanupData() {
     // 2. Attach External Databases (READ-ONLY + IMMUTABLE Mode for Safety)
     // This prevents the "malformed database schema" errors by ignoring the WAL files
     const attachQuery = `
-      ATTACH DATABASE 'file:${DB_PATHS.MAIN}?mode=ro&immutable=1' AS main_plex;
-      ATTACH DATABASE 'file:${DB_PATHS.KIDS}?mode=ro&immutable=1' AS kids;
-      ATTACH DATABASE 'file:${DB_PATHS.BACKUP}?mode=ro&immutable=1' AS backup;
+      ATTACH DATABASE 'file://${DB_PATHS.MAIN}?mode=ro&immutable=1' AS main_plex;
+      ATTACH DATABASE 'file://${DB_PATHS.KIDS}?mode=ro&immutable=1' AS kids;
+      ATTACH DATABASE 'file://${DB_PATHS.BACKUP}?mode=ro&immutable=1' AS backup;
     `;
     db.exec(attachQuery);
 
