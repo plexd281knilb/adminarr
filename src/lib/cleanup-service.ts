@@ -37,7 +37,7 @@ const CORE_SELECT = `
 export async function syncCleanupData() {
   const db = new Database(ADMIN_DB_PATH);
   
-  // Ensure tables exist
+  // 1. Ensure Tables Exist
   db.exec(`
     CREATE TABLE IF NOT EXISTS cleanup_queue (
       filepath TEXT PRIMARY KEY,
@@ -55,10 +55,23 @@ export async function syncCleanupData() {
     );
   `);
 
+  // 2. AUTO-MIGRATION (The "Safe Way")
+  // Checks if 'added_at' is missing and adds it without deleting data
+  const migrate = (table: string, col: string, type: string) => {
+    const info = db.pragma(`table_info(${table})`) as any[];
+    if (!info.some(c => c.name === col)) {
+        console.log(`[Migration] Updating ${table}: Adding missing column '${col}'...`);
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+    }
+  };
+
+  migrate('cleanup_queue', 'added_at', 'TEXT');
+  migrate('cleanup_history', 'added_at', 'TEXT');
+
+  // --- STANDARD SYNC LOGIC BELOW ---
   let plexDB;
   
   try {
-    // 1. QUERY PLEX (READ ONLY)
     plexDB = new Database(DB_PATHS.main, { readonly: true });
     plexDB.exec(`ATTACH DATABASE '${DB_PATHS.kids}' AS kids`);
     plexDB.exec(`ATTACH DATABASE '${DB_PATHS.backup}' AS backup`);
@@ -83,12 +96,9 @@ export async function syncCleanupData() {
     const currentPlexItems = plexDB.prepare(query).all();
     plexDB.close();
 
-    // 2. DETECT DELETIONS
-    // We need to fetch 'added_at' from the queue so we can copy it to history
     const storedItems = db.prepare('SELECT filepath, title, last_active, added_at FROM cleanup_queue').all();
     const currentFileSet = new Set(currentPlexItems.map((i: any) => i.file_path));
 
-    // FIX: Added 'added_at' to the INSERT statement
     const insertHistory = db.prepare('INSERT INTO cleanup_history (filepath, title, last_active, added_at) VALUES (?, ?, ?, ?)');
     const deleteQueue = db.prepare('DELETE FROM cleanup_queue WHERE filepath = ?');
 
@@ -96,7 +106,7 @@ export async function syncCleanupData() {
       for (const item of items) {
         if (!currentFileSet.has(item.filepath)) {
           if (!fs.existsSync(item.filepath)) {
-            // FIX: Pass item.added_at to the history
+            // Now safe to insert added_at because we migrated the table above
             insertHistory.run(item.filepath, item.title, item.last_active, item.added_at);
             deleteQueue.run(item.filepath);
           }
@@ -104,10 +114,8 @@ export async function syncCleanupData() {
       }
     });
 
-    // Run deletion check
     runTransaction(storedItems);
 
-    // 3. UPDATE QUEUE (Refresh with latest Plex Data)
     const upsertQueue = db.prepare(`
       INSERT OR REPLACE INTO cleanup_queue (filepath, title, last_active, added_at)
       VALUES (@file_path, @title, @last_active, @added_at)
