@@ -12,9 +12,8 @@ const DB_PATHS = {
 const ADMIN_DB_PATH = path.join(process.cwd(), 'data', 'dev.db');
 
 // --- HELPER TO BUILD SQL FOR EACH DB ---
-// This ensures we join 'kids.media_items' with 'kids.media_parts', not mixing DBs.
 const buildSelect = (dbPrefix: string = "") => {
-    const p = dbPrefix ? `${dbPrefix}.` : ""; // e.g. "kids." or ""
+    const p = dbPrefix ? `${dbPrefix}.` : ""; 
     
     return `
     SELECT 
@@ -22,12 +21,18 @@ const buildSelect = (dbPrefix: string = "") => {
         datetime(${p}mi.created_at, 'unixepoch', 'localtime') AS added_at,
         CASE 
             WHEN ${p}mp.file LIKE ('%/Kid_TV/%')      THEN replace(${p}mp.file,'/Kid_TV/','/mnt/user/Kid_TV_Shows/')
+            WHEN ${p}mp.file LIKE ('%/tvshows/%')     THEN replace(${p}mp.file,'/Kid_TV/','/mnt/user/Kid_TV_Shows/')
             WHEN ${p}mp.file LIKE ('%/tv/%')          THEN replace(${p}mp.file,'/tv/','/mnt/user/TV_Shows/')
+            
+            -- Special case: File says 'movies' but Library is 'Kids Movies'
+            WHEN ${p}mp.file LIKE ('%/movies/%') AND ${p}ls.name = 'Kids Movies' 
+                                                      THEN replace(${p}mp.file,'/Kid_Movies/','/mnt/user/Kid_Movies/')
+            
             WHEN ${p}mp.file LIKE ('%/movies/%')      THEN replace(${p}mp.file,'/movies/','/mnt/user/Movies/')
             WHEN ${p}mp.file LIKE ('%/4k_Movies/%')   THEN replace(${p}mp.file,'/4k_Movies/','/mnt/user/4k_Movies/')
             WHEN ${p}mp.file LIKE ('%/Kid_Movies/%')  THEN replace(${p}mp.file,'/Kid_Movies/','/mnt/user/Kid_Movies/')
             WHEN ${p}mp.file LIKE ('%/4k_tv_shows/%') THEN replace(${p}mp.file,'/4k_tv_shows/','/mnt/user/4k_TV_Shows/')
-            ELSE ${p}mp.file
+            ELSE NULL
         END AS file_path,
         ${p}mi.title
     FROM ${p}metadata_items AS ${p}mi
@@ -38,7 +43,7 @@ const buildSelect = (dbPrefix: string = "") => {
         SELECT MAX(datetime(viewed_at, 'unixepoch', 'localtime')) AS viewed_at, guid
         FROM ${p}metadata_item_views GROUP BY guid
     ) miv ON miv.guid = ${p}mi.guid
-    WHERE ${p}ls.name IN ('Movies','TV Shows')
+    WHERE ${p}ls.name IN ('Movies','TV Shows', 'Kids Movies', 'Kids TV Shows')
     `;
 };
 
