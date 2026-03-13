@@ -71,21 +71,14 @@ export async function saveJobSettings(formData: FormData) {
   revalidatePath("/settings");
 }
 
-export async function saveFeeSettings(formData: FormData) {
-    // Safely extract and parse the numbers directly on the server
-    const monthlyStr = formData.get("monthlyFee") as string;
-    const yearlyStr = formData.get("yearlyFee") as string;
-    
-    const monthly = parseFloat(monthlyStr) || 0;
-    const yearly = parseFloat(yearlyStr) || 0;
-
+export async function saveFeeSettings(monthly: number, yearly: number) {
     await prisma.settings.upsert({
         where: { id: "global" },
         update: { monthlyFee: monthly, yearlyFee: yearly },
         create: { id: "global", monthlyFee: monthly, yearlyFee: yearly }
     });
     
-    // Clear the cache for BOTH pages so the UI updates instantly
+    // This was the missing piece that caused your original issue!
     revalidatePath("/settings");
     revalidatePath("/payments");
 }

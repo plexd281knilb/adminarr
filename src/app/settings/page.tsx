@@ -83,12 +83,12 @@ export default function SettingsPage() {
         e.preventDefault();
         const formData = new FormData(e.target as HTMLFormElement);
         
-        // Pass the raw formData to the server action instead of parsing it here
-        await saveFeeSettings(formData);
+        const monthly = parseFloat(formData.get("monthlyFee") as string) || 0;
+        const yearly = parseFloat(formData.get("yearlyFee") as string) || 0;
         
-        alert("Fee settings saved successfully.");
+        await saveFeeSettings(monthly, yearly);
         
-        // Reload the UI data so it perfectly reflects the database
+        alert("Fee settings saved.");
         loadAllData();
     };
 
