@@ -14,7 +14,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # FIX: Install Prisma globally to guarantee the binary exists and is the right version
-RUN npm install -g prisma@6.19.2
+RUN npm install -g prisma@5.22.0
 RUN prisma generate
 
 # Build Next.js
