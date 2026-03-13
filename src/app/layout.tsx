@@ -17,15 +17,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider
             attribute="class"
-            defaultTheme="system"
-            enableSystem
+            defaultTheme="dark"
+            forcedTheme="dark"
             disableTransitionOnChange
           >
-          {/* UPDATED: Uses bg-background to switch automatically */}
           <div className="flex h-screen overflow-hidden bg-background text-foreground">
             
             {/* Desktop Sidebar */}

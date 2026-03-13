@@ -6,7 +6,12 @@ import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { redirect } from "next/navigation";
 
-const prisma = new PrismaClient();
+// --- PRISMA 6 SINGLETON PATTERN ---
+// Prevents connection exhaustion during Next.js hot-reloads
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "default-secret-key-change-me");
 
 // --- 1. SETUP CHECK ---
@@ -79,7 +84,6 @@ export async function login(formData: FormData) {
 
 // --- 4. LOGOUT ---
 export async function logout() {
-  // FIX: await cookies() before calling delete
   (await cookies()).delete("session");
   redirect("/login");
 }
@@ -94,19 +98,17 @@ async function createSession(userId: string, username: string, role: string) {
 
   console.log("[AUTH] Setting session cookie...");
 
-  // FIX: await cookies() is required in Next.js 16
   (await cookies()).set("session", token, {
     httpOnly: true,
-    secure: false,  // <--- THIS IS THE KEY. It allows login over HTTP (IP or Localhost).
+    secure: false,  // Allows login over HTTP (IP or Localhost)
     maxAge: 60 * 60 * 24, 
     path: "/",
     sameSite: "lax",
   });
 }
 
-// --- HELPER: GET SESSION (For Middleware/Server Components) ---
+// --- HELPER: GET SESSION ---
 export async function getSession() {
-  // FIX: await cookies() before calling get
   const token = (await cookies()).get("session")?.value;
   if (!token) return null;
 
