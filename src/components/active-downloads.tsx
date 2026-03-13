@@ -155,7 +155,7 @@ export default function AdminOverviewPage() {
                                                     <span className="truncate pr-2 font-medium">{item.filename || item.title || "Unknown"}</span>
                                                     <span className="text-muted-foreground whitespace-nowrap">{item.timeleft || ""}</span>
                                                 </div>
-                                                <Progress value={parseFloat(item.percentage || item.sizeleft ? ((item.size - item.sizeleft) / item.size * 100).toString() : \"0\")} className="h-1.5" />
+                                                <Progress value={parseFloat(item.percentage || item.sizeleft ? ((item.size - item.sizeleft) / item.size * 100).toString() : "0")} className="h-1.5" />
                                             </div>
                                         ))}
                                     </div>
