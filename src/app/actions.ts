@@ -441,6 +441,32 @@ export async function createAppUser(formData: FormData) {
     }
 }
 
+export async function updateAppUser(formData: FormData) {
+    const id = formData.get("id") as string;
+    const username = formData.get("username") as string;
+    const email = formData.get("email") as string;
+    const role = formData.get("role") as string;
+    const password = formData.get("password") as string;
+
+    const updateData: any = { username, email, role };
+
+    // Only update the password if they actually typed a new one
+    if (password && password.trim() !== "") {
+        updateData.password = await hash(password, 10);
+    }
+
+    try {
+        await prisma.user.update({
+            where: { id },
+            data: updateData
+        });
+        revalidatePath("/settings");
+        revalidatePath("/settings/access");
+    } catch (e) {
+        console.error("Failed to update user", e);
+    }
+}
+
 export async function deleteAppUser(id: string) {
     try {
         await prisma.user.delete({ where: { id } });
@@ -525,4 +551,48 @@ export async function getDashboardActivity() {
 export async function getMediaAppsActivity() {
   const { fetchMediaAppsActivity } = await import("@/app/data");
   return await fetchMediaAppsActivity();
+}
+
+// --- UPDATE ACTIONS (EDITING) ---
+
+export async function updateTautulliInstance(formData: FormData) {
+    const id = formData.get("id") as string;
+    const name = formData.get("name") as string;
+    const url = formData.get("url") as string;
+    const apiKey = formData.get("apiKey") as string;
+    await prisma.tautulliInstance.update({ where: { id }, data: { name, url, apiKey } });
+    revalidatePath("/settings");
+}
+
+export async function updateGlancesInstance(formData: FormData) {
+    const id = formData.get("id") as string;
+    const name = formData.get("name") as string;
+    const url = formData.get("url") as string;
+    await prisma.glancesInstance.update({ where: { id }, data: { name, url } });
+    revalidatePath("/settings");
+}
+
+export async function updateMediaApp(formData: FormData) {
+    const id = formData.get("id") as string;
+    const name = formData.get("name") as string;
+    const type = formData.get("type") as string;
+    const url = formData.get("url") as string;
+    const apiKey = formData.get("apiKey") as string;
+    await prisma.mediaApp.update({ where: { id }, data: { name, type, url, apiKey } });
+    revalidatePath("/settings");
+}
+
+export async function updateEmailAccount(data: any) {
+    await prisma.emailAccount.update({
+        where: { id: data.id },
+        data: {
+            name: data.name,
+            host: data.host,
+            user: data.user,
+            pass: data.pass,
+            port: parseInt(data.port)
+        }
+    });
+    revalidatePath("/settings");
+    revalidatePath("/payments");
 }
