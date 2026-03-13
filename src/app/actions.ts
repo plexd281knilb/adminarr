@@ -527,3 +527,14 @@ export async function sendManualEmail(formData: FormData) {
         return { error: e.message || "Failed to send email." };
     }
 }
+
+// --- DASHBOARD ACCESSORS ---
+export async function getDashboardActivity() {
+  const { fetchDashboardData } = await import("@/app/data");
+  return await fetchDashboardData();
+}
+
+export async function getMediaAppsActivity() {
+  const { fetchMediaAppsActivity } = await import("@/app/data");
+  return await fetchMediaAppsActivity();
+}

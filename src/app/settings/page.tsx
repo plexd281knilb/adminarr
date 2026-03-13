@@ -8,19 +8,16 @@ import {
     getSettings, saveSettings, saveFeeSettings, saveJobSettings, 
     // Email (Scanning)
     getEmailAccounts, addEmailAccount, deleteEmailAccount, 
-    // Apps & Monitoring
-    getTautulliInstances, addTautulliInstance, removeTautulliInstance,
-    getGlancesInstances, addGlancesInstance, removeGlancesInstance,
-    getMediaApps, addMediaApp, updateMediaApp, removeMediaApp 
+    // Integrations
+    getTautulliInstances, addTautulliInstance, removeTautulliInstance
 } from "@/app/actions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Trash2, UserPlus, Shield, User, Mail, Send, Pencil, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Trash2, UserPlus, Shield, User, Mail, Send } from "lucide-react";
 
 export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
@@ -32,28 +29,19 @@ export default function SettingsPage() {
     
     // App States
     const [tautulli, setTautulli] = useState<any[]>([]);
-    const [glances, setGlances] = useState<any[]>([]);
-    const [mediaApps, setMediaApps] = useState<any[]>([]);
-
-    // Edit Mode State
-    const [editingApp, setEditingApp] = useState<any>(null);
 
     const loadAllData = async () => {
         setLoading(true);
-        const [u, e, s, t, g, m] = await Promise.all([
+        const [u, e, s, t] = await Promise.all([
             getAppUsers(),
             getEmailAccounts(),
             getSettings(),
-            getTautulliInstances(),
-            getGlancesInstances(),
-            getMediaApps()
+            getTautulliInstances()
         ]);
         setUsers(u);
         setEmailAccounts(e);
         setSystemSettings(s || {});
         setTautulli(t);
-        setGlances(g);
-        setMediaApps(m);
         setLoading(false);
     };
 
@@ -65,7 +53,6 @@ export default function SettingsPage() {
         const formData = new FormData(e.target as HTMLFormElement);
         await action(formData); 
         (e.target as HTMLFormElement).reset();
-        setEditingApp(null); // Clear edit mode
         loadAllData();
     };
 
@@ -94,15 +81,6 @@ export default function SettingsPage() {
         alert("Fee settings saved.");
     };
 
-    // Populate form for editing
-    const startEdit = (app: any) => {
-        setEditingApp(app);
-    };
-
-    const cancelEdit = () => {
-        setEditingApp(null);
-    };
-
     return (
         <div className="space-y-6 p-8 max-w-6xl mx-auto">
             <div>
@@ -111,11 +89,10 @@ export default function SettingsPage() {
             </div>
 
             <Tabs defaultValue="general" className="space-y-4">
-                {/* UPDATED: grid-cols-2 on mobile, grid-cols-4 on desktop, h-auto to allow wrapping */}
                 <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto">
                     <TabsTrigger value="general">General & SMTP</TabsTrigger>
                     <TabsTrigger value="access">Access Control</TabsTrigger>
-                    <TabsTrigger value="monitoring">Monitoring & Apps</TabsTrigger>
+                    <TabsTrigger value="integrations">Integrations</TabsTrigger>
                     <TabsTrigger value="payments">Payment Scanning</TabsTrigger>
                 </TabsList>
 
@@ -217,14 +194,15 @@ export default function SettingsPage() {
                     </div>
                 </TabsContent>
 
-                {/* --- TAB 3: MONITORING & APPS --- */}
-                <TabsContent value="monitoring" className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-3">
+                {/* --- TAB 3: INTEGRATIONS --- */}
+                <TabsContent value="integrations" className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
                         {/* TAUTULLI */}
                         <Card className="col-span-1">
                             <CardHeader><CardTitle>Tautulli</CardTitle><CardDescription>For syncing users.</CardDescription></CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="space-y-2">
+                                    {tautulli.length === 0 && <div className="text-sm italic text-muted-foreground">No Tautulli instances configured.</div>}
                                     {tautulli.map(t => (
                                         <div key={t.id} className="flex justify-between items-center border p-2 rounded text-sm">
                                             <span className="truncate">{t.name}</span>
@@ -237,122 +215,6 @@ export default function SettingsPage() {
                                     <Input name="url" placeholder="URL (http://...)" required className="h-8 text-xs"/>
                                     <Input name="apiKey" placeholder="API Key" required className="h-8 text-xs"/>
                                     <Button type="submit" size="sm" className="w-full">Add Tautulli</Button>
-                                </form>
-                            </CardContent>
-                        </Card>
-
-                        {/* GLANCES */}
-                        <Card className="col-span-1">
-                            <CardHeader><CardTitle>Glances</CardTitle><CardDescription>Server stats.</CardDescription></CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="space-y-2">
-                                    {glances.map(g => (
-                                        <div key={g.id} className="flex justify-between items-center border p-2 rounded text-sm">
-                                            <span className="truncate">{g.name}</span>
-                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-red-500" onClick={() => handleDelete(g.id, removeGlancesInstance)}><Trash2 className="h-3 w-3"/></Button>
-                                        </div>
-                                    ))}
-                                </div>
-                                <form onSubmit={(e) => handleForm(e, addGlancesInstance)} className="space-y-2 border-t pt-2">
-                                    <Input name="name" placeholder="Name" required className="h-8 text-xs"/>
-                                    <Input name="url" placeholder="URL" required className="h-8 text-xs"/>
-                                    <Button type="submit" size="sm" className="w-full">Add Glances</Button>
-                                </form>
-                            </CardContent>
-                        </Card>
-
-                        {/* MEDIA APPS (EDITABLE) */}
-                        <Card className="col-span-1">
-                            <CardHeader>
-                                <CardTitle>{editingApp ? "Edit Application" : "Applications"}</CardTitle>
-                                <CardDescription>{editingApp ? `Editing: ${editingApp.name}` : "Services for the Apps page."}</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {/* List of Apps */}
-                                {!editingApp && (
-                                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                                        {mediaApps.map(app => (
-                                            <div key={app.id} className="flex justify-between items-center border p-2 rounded text-sm">
-                                                <div className="truncate">
-                                                    <div className="font-medium">{app.name}</div>
-                                                    <div className="text-[10px] text-muted-foreground uppercase">{app.type}</div>
-                                                </div>
-                                                <div className="flex gap-1">
-                                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-blue-500" onClick={() => startEdit(app)}>
-                                                        <Pencil className="h-3 w-3"/>
-                                                    </Button>
-                                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-red-500" onClick={() => handleDelete(app.id, removeMediaApp)}>
-                                                        <Trash2 className="h-3 w-3"/>
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Form (Add or Update) */}
-                                <form 
-                                    onSubmit={(e) => handleForm(e, editingApp ? updateMediaApp : addMediaApp)} 
-                                    className={`space-y-2 ${!editingApp && "border-t pt-2"}`}
-                                >
-                                    {/* Hidden ID for Update */}
-                                    {editingApp && <input type="hidden" name="id" value={editingApp.id} />}
-
-                                    <Select name="type" required defaultValue={editingApp?.type}>
-                                        <SelectTrigger className="h-8"><SelectValue placeholder="Select App Type" /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectGroup>
-                                                <SelectLabel>Downloads</SelectLabel>
-                                                <SelectItem value="sabnzbd">SABnzbd</SelectItem>
-                                                <SelectItem value="nzbget">NZBGet</SelectItem>
-                                            </SelectGroup>
-                                            <SelectGroup>
-                                                <SelectLabel>Movies & TV</SelectLabel>
-                                                <SelectItem value="radarr">Radarr</SelectItem>
-                                                <SelectItem value="sonarr">Sonarr</SelectItem>
-                                            </SelectGroup>
-                                            <SelectGroup>
-                                                <SelectLabel>Requests</SelectLabel>
-                                                <SelectItem value="overseerr">Overseerr</SelectItem>
-                                                <SelectItem value="jellyseerr">Jellyseerr</SelectItem>
-                                                <SelectItem value="ombi">Ombi</SelectItem>
-                                            </SelectGroup>
-                                            <SelectGroup>
-                                                <SelectLabel>Utility</SelectLabel>
-                                                <SelectItem value="bazarr">Bazarr</SelectItem>
-                                                <SelectItem value="prowlarr">Prowlarr</SelectItem>
-                                                <SelectItem value="readarr">Readarr</SelectItem>
-                                                <SelectItem value="lidarr">Lidarr</SelectItem>
-                                                <SelectItem value="maintainerr">Maintainerr</SelectItem>
-                                            </SelectGroup>
-                                        </SelectContent>
-                                    </Select>
-                                    
-                                    <Input name="name" placeholder="App Name" required className="h-8 text-xs" defaultValue={editingApp?.name} />
-                                    
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className="space-y-1">
-                                            <Label className="text-[10px] text-muted-foreground">Internal URL (API)</Label>
-                                            <Input name="url" placeholder="http://192.168.1.X:PORT" required className="h-8 text-xs" defaultValue={editingApp?.url} />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <Label className="text-[10px] text-muted-foreground">External URL (User)</Label>
-                                            <Input name="externalUrl" placeholder="https://requests.domain.com" className="h-8 text-xs" defaultValue={editingApp?.externalUrl} />
-                                        </div>
-                                    </div>
-
-                                    <Input name="apiKey" placeholder="API Key" className="h-8 text-xs" defaultValue={editingApp?.apiKey} />
-                                    
-                                    <div className="flex gap-2">
-                                        <Button type="submit" size="sm" className="w-full">
-                                            {editingApp ? "Update App" : "Add App"}
-                                        </Button>
-                                        {editingApp && (
-                                            <Button type="button" size="sm" variant="outline" onClick={cancelEdit}>
-                                                <X className="h-4 w-4"/>
-                                            </Button>
-                                        )}
-                                    </div>
                                 </form>
                             </CardContent>
                         </Card>
