@@ -515,14 +515,15 @@ export async function sendManualEmail(formData: FormData) {
 }
 
 // --- DASHBOARD ACCESSORS ---
+// We now import the CACHED versions to ensure 0.2s load times
 export async function getDashboardActivity() {
-  const { fetchDashboardData } = await import("@/app/data");
-  return await fetchDashboardData();
+  const { getCachedDashboardData } = await import("@/app/data");
+  return await getCachedDashboardData();
 }
 
 export async function getMediaAppsActivity() {
-  const { fetchMediaAppsActivity } = await import("@/app/data");
-  return await fetchMediaAppsActivity();
+  const { getCachedMediaAppsActivity } = await import("@/app/data");
+  return await getCachedMediaAppsActivity();
 }
 
 // --- UPDATE ACTIONS (EDITING) ---

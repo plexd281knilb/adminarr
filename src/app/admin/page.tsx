@@ -67,14 +67,7 @@ export default function AdminOverviewPage() {
         return () => clearInterval(intervalId);
     }, []);
 
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center h-[80vh] space-y-4 px-4 text-center">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <p className="text-muted-foreground font-medium animate-pulse">Establishing Uplink to Mission Control...</p>
-            </div>
-        );
-    }
+
 
     const mainHardware = dashboardData.find((d: any) => d?.type === "hardware" && d?.name.toLowerCase().includes("main"));
     const mainPlex = dashboardData.find((d: any) => d?.type === "plex" && d?.name.toLowerCase().includes("main"));
