@@ -6,6 +6,8 @@ const prisma = new PrismaClient();
 
 export async function scanEmailAccounts() {
     const accounts = await prisma.emailAccount.findMany();
+    // Fetch settings here so we know the correct monthly/yearly prices
+    const settings = await prisma.settings.findFirst({ where: { id: "global" } }) || { monthlyFee: 18, yearlyFee: 180 };
     const logs: string[] = [];
     let newPaymentsCount = 0;
 
@@ -83,27 +85,20 @@ export async function scanEmailAccounts() {
 
         // --- PARSING LOGIC ---
         if (provider === "Venmo") {
-            // Subject: "Austin Bamrick paid you $180.00"
             const match = subject.match(/^(.*?) paid you \$([\d,]+\.\d{2})/);
             if (!match) return;
             payerName = match[1].trim();
             amount = parseFloat(match[2].replace(/,/g, ''));
 
-            // ID extraction
             const idMatch = html.match(/Transaction ID<\/h3>[\s\S]*?<p[^>]*>(\d+)<\/p>/);
             externalId = idMatch ? idMatch[1] : `venmo_${payerName}_${amount}_${date.getTime()}`;
         } 
         else if (provider === "PayPal") {
-            // Subject: "Derek Spies sent you $360.00 USD"
-            // Note: We scan for 'sent you' to avoid requests/invoices
             const match = subject.match(/^(.*?) sent you \$([\d,]+\.\d{2})/);
             if (!match) return;
             payerName = match[1].trim();
             amount = parseFloat(match[2].replace(/,/g, ''));
 
-            // ID extraction (PayPal HTML is very messy/nested)
-            // We look for the "Transaction ID" label, then find the next alphanumeric string in a span
-            // Or fallback to a generated ID since PayPal IDs (17 chars) are hard to regex reliably in messy HTML
             const idMatch = html.match(/Transaction ID[\s\S]*?<span>([A-Z0-9]{17})<\/span>/);
             externalId = idMatch ? idMatch[1] : `paypal_${payerName}_${amount}_${date.getTime()}`;
         }
@@ -113,7 +108,6 @@ export async function scanEmailAccounts() {
             const exists = await prisma.payment.findUnique({ where: { externalId } });
             
             if (!exists) {
-                // Auto-Link Logic
                 const linkedUser = await prisma.subscriber.findFirst({
                     where: { 
                         OR: [
@@ -123,6 +117,19 @@ export async function scanEmailAccounts() {
                     }
                 });
 
+                let validUserToLink = null;
+
+                // --- STRICT $1 MATCH LOGIC ---
+                if (linkedUser) {
+                    const cycle = linkedUser.billingCycle || "Monthly";
+                    const expectedFee = cycle === "Yearly" ? settings.yearlyFee : settings.monthlyFee;
+                    
+                    // Only approve auto-link if the payment is within exactly $1 of expected fee
+                    if (Math.abs(amount - expectedFee) <= 1) {
+                        validUserToLink = linkedUser;
+                    }
+                }
+
                 await prisma.payment.create({
                     data: {
                         provider,
@@ -130,15 +137,44 @@ export async function scanEmailAccounts() {
                         payerName,
                         amount,
                         date,
-                        status: linkedUser ? "Linked" : "Unlinked",
-                        subscriberId: linkedUser ? linkedUser.id : null
+                        status: validUserToLink ? "Linked" : "Unlinked",
+                        subscriberId: validUserToLink ? validUserToLink.id : null
                     }
                 });
 
-                if (linkedUser) {
+                // --- FULLY ADVANCE THE USER'S DUE DATE ---
+                if (validUserToLink) {
+                    const cycle = validUserToLink.billingCycle || "Monthly";
+                    let newDueDate = validUserToLink.nextPaymentDate ? new Date(validUserToLink.nextPaymentDate) : new Date(date);
+                    const paymentDate = new Date(date);
+
+                    if (cycle === "Yearly") {
+                        if (validUserToLink.nextPaymentDate) {
+                             const anchor = new Date(validUserToLink.nextPaymentDate);
+                             anchor.setFullYear(anchor.getFullYear() + 1);
+                             newDueDate = anchor;
+                        } else {
+                             const anchor = new Date(date);
+                             anchor.setFullYear(anchor.getFullYear() + 1);
+                             newDueDate = anchor;
+                        }
+                    } else {
+                        let anchorDate = new Date(newDueDate); 
+                        if (paymentDate > anchorDate) {
+                            anchorDate = new Date(paymentDate);
+                        }
+                        anchorDate.setMonth(anchorDate.getMonth() + 1);
+                        newDueDate = anchorDate;
+                    }
+
                     await prisma.subscriber.update({
-                        where: { id: linkedUser.id },
-                        data: { lastPaymentAmount: amount, lastPaymentDate: date }
+                        where: { id: validUserToLink.id },
+                        data: { 
+                            lastPaymentAmount: amount, 
+                            lastPaymentDate: date,
+                            nextPaymentDate: newDueDate,
+                            status: validUserToLink.status === "Exempt" ? "Exempt" : "Active"
+                        }
                     });
                 }
                 newPaymentsCount++;

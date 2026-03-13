@@ -71,12 +71,22 @@ export async function saveJobSettings(formData: FormData) {
   revalidatePath("/settings");
 }
 
-export async function saveFeeSettings(monthly: number, yearly: number) {
+export async function saveFeeSettings(formData: FormData) {
+    // Safely extract and parse the numbers directly on the server
+    const monthlyStr = formData.get("monthlyFee") as string;
+    const yearlyStr = formData.get("yearlyFee") as string;
+    
+    const monthly = parseFloat(monthlyStr) || 0;
+    const yearly = parseFloat(yearlyStr) || 0;
+
     await prisma.settings.upsert({
         where: { id: "global" },
         update: { monthlyFee: monthly, yearlyFee: yearly },
         create: { id: "global", monthlyFee: monthly, yearlyFee: yearly }
     });
+    
+    // Clear the cache for BOTH pages so the UI updates instantly
+    revalidatePath("/settings");
     revalidatePath("/payments");
 }
 
@@ -97,6 +107,48 @@ export async function removeTautulliInstance(id: string) {
 
 export async function getTautulliInstances() {
     return await prisma.tautulliInstance.findMany();
+}
+
+// --- GLANCES ACTIONS ---
+
+export async function addGlancesInstance(formData: FormData) {
+  const name = formData.get("name") as string;
+  const url = formData.get("url") as string;
+  await prisma.glancesInstance.create({ data: { name, url } });
+  revalidatePath("/settings");
+}
+
+export async function removeGlancesInstance(id: string) {
+  await prisma.glancesInstance.delete({ where: { id } });
+  revalidatePath("/settings");
+}
+
+export async function getGlancesInstances() {
+    return await prisma.glancesInstance.findMany();
+}
+
+// --- MEDIA APPS ACTIONS ---
+
+export async function addMediaApp(formData: FormData) {
+  const name = formData.get("name") as string;
+  const type = formData.get("type") as string;
+  const url = formData.get("url") as string;
+  const externalUrl = formData.get("externalUrl") as string;
+  const apiKey = formData.get("apiKey") as string;
+  
+  await prisma.mediaApp.create({ 
+      data: { name, type, url, externalUrl, apiKey } 
+  });
+  revalidatePath("/settings");
+}
+
+export async function removeMediaApp(id: string) {
+  await prisma.mediaApp.delete({ where: { id } });
+  revalidatePath("/settings");
+}
+
+export async function getMediaAppsList() {
+    return await prisma.mediaApp.findMany();
 }
 
 // --- SUBSCRIBER ACTIONS ---
@@ -210,17 +262,15 @@ export async function linkPaymentToUser(paymentId: string, subscriberId: string)
     const cycle = sub.billingCycle || "Monthly";
     
     let expectedFee = 0;
-    let threshold = 0;
 
     if (cycle === "Yearly") {
         expectedFee = settings.yearlyFee;
-        threshold = 5; 
     } else {
         expectedFee = settings.monthlyFee;
-        threshold = 1; 
     }
 
-    const isSufficient = payment.amount >= (expectedFee - threshold);
+    // STRICT $1 MATCH: Payment must be exactly within $1 of the expected fee
+    const isSufficient = Math.abs(payment.amount - expectedFee) <= 1;
 
     let updateData: any = {
         fullName: payment.payerName,
@@ -408,14 +458,13 @@ export async function deleteAppUser(id: string) {
     }
 }
 
-// --- LANDING PAGE & SUPPORT ACTIONS ---
+// --- LANDING PAGE ACTIONS ---
 
 export async function getLandingStats() {
     const tautulli = await prisma.tautulliInstance.findMany();
 
     let totalStreams = 0;
 
-    // 1. Tautulli Streams Only
     await Promise.all(tautulli.map(async (t) => {
         let baseUrl = cleanUrl(t.url).replace(/\/api\/v2\/?$/, "");
         const fullUrl = `${baseUrl}/api/v2?apikey=${t.apiKey}&cmd=get_activity`;
@@ -437,60 +486,6 @@ export async function getLandingStats() {
     }));
 
     return { totalStreams };
-}
-
-export async function submitSupportTicket(formData: FormData) {
-    const name = formData.get("name") as string;
-    const email = formData.get("email") as string;
-    const issue = formData.get("issue") as string;
-
-    if (!name || !email || !issue) return { error: "All fields required" };
-
-    try {
-        await prisma.supportTicket.create({
-            data: { name, email, issue }
-        });
-
-        const settings = await prisma.settings.findFirst({ where: { id: "global" } });
-        
-        if (settings?.smtpHost && settings?.smtpUser) {
-            const transporter = nodemailer.createTransport({
-                host: settings.smtpHost,
-                port: settings.smtpPort,
-                secure: settings.smtpPort === 465, 
-                auth: { user: settings.smtpUser, pass: settings.smtpPass },
-            } as any);
-
-            await transporter.sendMail({
-                from: `"Support" <${settings.smtpUser}>`,
-                to: settings.smtpUser, 
-                replyTo: email,
-                subject: `New Ticket from ${name}`,
-                text: `User: ${name} (${email})\n\nIssue:\n${issue}`
-            });
-        }
-        revalidatePath("/");
-        return { success: true };
-    } catch (e) {
-        console.error("Support Ticket Error:", e);
-        return { error: "Failed to submit ticket." };
-    }
-}
-
-export async function getSupportTickets() {
-    return await prisma.supportTicket.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 50
-    });
-}
-
-export async function updateTicketStatus(id: string, status: string) {
-    await prisma.supportTicket.update({
-        where: { id },
-        data: { status }
-    });
-    revalidatePath("/");
-    revalidatePath("/admin/tickets");
 }
 
 export async function sendManualEmail(formData: FormData) {

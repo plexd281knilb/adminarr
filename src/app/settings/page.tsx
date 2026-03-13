@@ -9,7 +9,9 @@ import {
     // Email (Scanning)
     getEmailAccounts, addEmailAccount, deleteEmailAccount, 
     // Integrations
-    getTautulliInstances, addTautulliInstance, removeTautulliInstance
+    getTautulliInstances, addTautulliInstance, removeTautulliInstance,
+    getGlancesInstances, addGlancesInstance, removeGlancesInstance,
+    getMediaAppsList, addMediaApp, removeMediaApp
 } from "@/app/actions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,19 +31,25 @@ export default function SettingsPage() {
     
     // App States
     const [tautulli, setTautulli] = useState<any[]>([]);
+    const [glances, setGlances] = useState<any[]>([]);
+    const [mediaApps, setMediaApps] = useState<any[]>([]);
 
     const loadAllData = async () => {
         setLoading(true);
-        const [u, e, s, t] = await Promise.all([
+        const [u, e, s, t, g, m] = await Promise.all([
             getAppUsers(),
             getEmailAccounts(),
             getSettings(),
-            getTautulliInstances()
+            getTautulliInstances(),
+            getGlancesInstances(),
+            getMediaAppsList()
         ]);
         setUsers(u);
         setEmailAccounts(e);
         setSystemSettings(s || {});
         setTautulli(t);
+        setGlances(g);
+        setMediaApps(m);
         setLoading(false);
     };
 
@@ -74,15 +82,18 @@ export default function SettingsPage() {
     const handleSaveFees = async (e: React.FormEvent) => {
         e.preventDefault();
         const formData = new FormData(e.target as HTMLFormElement);
-        await saveFeeSettings(
-            parseFloat(formData.get("monthlyFee") as string),
-            parseFloat(formData.get("yearlyFee") as string)
-        );
-        alert("Fee settings saved.");
+        
+        // Pass the raw formData to the server action instead of parsing it here
+        await saveFeeSettings(formData);
+        
+        alert("Fee settings saved successfully.");
+        
+        // Reload the UI data so it perfectly reflects the database
+        loadAllData();
     };
 
     return (
-        <div className="space-y-6 p-8 max-w-6xl mx-auto">
+        <div className="space-y-6 p-8 max-w-6xl mx-auto pb-12">
             <div>
                 <h2 className="text-3xl font-bold tracking-tight">System Settings</h2>
                 <p className="text-muted-foreground">Configure the platform, integrations, and access.</p>
@@ -196,13 +207,35 @@ export default function SettingsPage() {
 
                 {/* --- TAB 3: INTEGRATIONS --- */}
                 <TabsContent value="integrations" className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                        {/* TAUTULLI */}
-                        <Card className="col-span-1">
-                            <CardHeader><CardTitle>Tautulli</CardTitle><CardDescription>For syncing users.</CardDescription></CardHeader>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        
+                        {/* GLANCES */}
+                        <Card>
+                            <CardHeader><CardTitle>Glances (Hardware)</CardTitle></CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="space-y-2">
-                                    {tautulli.length === 0 && <div className="text-sm italic text-muted-foreground">No Tautulli instances configured.</div>}
+                                <div className="space-y-2 max-h-[150px] overflow-y-auto">
+                                    {glances.length === 0 && <div className="text-sm italic text-muted-foreground">No instances configured.</div>}
+                                    {glances.map(g => (
+                                        <div key={g.id} className="flex justify-between items-center border p-2 rounded text-sm">
+                                            <span className="truncate">{g.name}</span>
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-red-500" onClick={() => handleDelete(g.id, removeGlancesInstance)}><Trash2 className="h-3 w-3"/></Button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <form onSubmit={(e) => handleForm(e, addGlancesInstance)} className="space-y-2 border-t pt-2">
+                                    <Input name="name" placeholder="Name (e.g. Main)" required className="h-8 text-xs"/>
+                                    <Input name="url" placeholder="URL (http://...)" required className="h-8 text-xs"/>
+                                    <Button type="submit" size="sm" className="w-full">Add Glances</Button>
+                                </form>
+                            </CardContent>
+                        </Card>
+
+                        {/* TAUTULLI */}
+                        <Card>
+                            <CardHeader><CardTitle>Tautulli</CardTitle></CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2 max-h-[150px] overflow-y-auto">
+                                    {tautulli.length === 0 && <div className="text-sm italic text-muted-foreground">No instances configured.</div>}
                                     {tautulli.map(t => (
                                         <div key={t.id} className="flex justify-between items-center border p-2 rounded text-sm">
                                             <span className="truncate">{t.name}</span>
@@ -211,13 +244,53 @@ export default function SettingsPage() {
                                     ))}
                                 </div>
                                 <form onSubmit={(e) => handleForm(e, addTautulliInstance)} className="space-y-2 border-t pt-2">
-                                    <Input name="name" placeholder="Name" size={1} required className="h-8 text-xs"/>
+                                    <Input name="name" placeholder="Name (e.g. Main)" required className="h-8 text-xs"/>
                                     <Input name="url" placeholder="URL (http://...)" required className="h-8 text-xs"/>
                                     <Input name="apiKey" placeholder="API Key" required className="h-8 text-xs"/>
                                     <Button type="submit" size="sm" className="w-full">Add Tautulli</Button>
                                 </form>
                             </CardContent>
                         </Card>
+
+                        {/* MEDIA APPS */}
+                        <Card className="md:col-span-2 lg:col-span-1">
+                            <CardHeader><CardTitle>Media Apps (*Arrs)</CardTitle></CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2 max-h-[150px] overflow-y-auto">
+                                    {mediaApps.length === 0 && <div className="text-sm italic text-muted-foreground">No apps configured.</div>}
+                                    {mediaApps.map(app => (
+                                        <div key={app.id} className="flex justify-between items-center border p-2 rounded text-sm">
+                                            <div className="truncate">
+                                                <span className="font-semibold">{app.name}</span> <span className="text-muted-foreground text-[10px] uppercase">({app.type})</span>
+                                            </div>
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-red-500" onClick={() => handleDelete(app.id, removeMediaApp)}><Trash2 className="h-3 w-3"/></Button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <form onSubmit={(e) => handleForm(e, addMediaApp)} className="space-y-2 border-t pt-2">
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Input name="name" placeholder="App Name" required className="h-8 text-xs"/>
+                                        <Select name="type" defaultValue="sonarr">
+                                            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="sonarr">Sonarr</SelectItem>
+                                                <SelectItem value="radarr">Radarr</SelectItem>
+                                                <SelectItem value="lidarr">Lidarr</SelectItem>
+                                                <SelectItem value="readarr">Readarr</SelectItem>
+                                                <SelectItem value="sabnzbd">SABnzbd</SelectItem>
+                                                <SelectItem value="nzbget">NZBGet</SelectItem>
+                                                <SelectItem value="overseerr">Overseerr</SelectItem>
+                                                <SelectItem value="ombi">Ombi</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <Input name="url" placeholder="Internal URL (http://...)" required className="h-8 text-xs"/>
+                                    <Input name="apiKey" placeholder="API Key" className="h-8 text-xs"/>
+                                    <Button type="submit" size="sm" className="w-full">Add App</Button>
+                                </form>
+                            </CardContent>
+                        </Card>
+
                     </div>
                 </TabsContent>
 

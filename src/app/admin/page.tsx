@@ -27,6 +27,25 @@ export default function AdminOverviewPage() {
         return cleanTime || "00:00:00";
     };
 
+    // --- HELPER: Map exact text status to highly noticeable colored badges ---
+    const getStatusBadge = (status: string) => {
+        switch(status) {
+            case "Pending":
+                return <Badge className="whitespace-nowrap bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30 border border-yellow-500/50 shadow-sm">Pending Approval</Badge>;
+            case "Approved":
+            case "Processing":
+                return <Badge className="whitespace-nowrap bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/50 shadow-sm">Approved Awaiting Download</Badge>;
+            case "Partially Available":
+                return <Badge className="whitespace-nowrap bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/50 shadow-sm">Partially Available</Badge>;
+            case "Available":
+                return <Badge className="whitespace-nowrap bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/50 shadow-sm">Available</Badge>;
+            case "Declined":
+                return <Badge className="whitespace-nowrap bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50 shadow-sm">Declined</Badge>;
+            default:
+                return <Badge variant="outline" className="whitespace-nowrap">{status}</Badge>;
+        }
+    };
+
     useEffect(() => {
         const fetchLiveStats = async () => {
             try {
@@ -202,7 +221,7 @@ export default function AdminOverviewPage() {
                 </CardContent>
             </Card>
 
-            {/* --- ROW 4: CONTENT REQUESTS (UPDATED WITH RAW STATUS) --- */}
+            {/* --- ROW 4: CONTENT REQUESTS --- */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><ListVideo className="h-5 w-5 text-primary"/> Pending & Active Requests</CardTitle>
@@ -222,13 +241,7 @@ export default function AdminOverviewPage() {
                                                     <span className="text-xs text-muted-foreground">{req.requestedBy?.displayName}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <Badge variant={req.status === 2 || req.status === "Approved" ? "secondary" : "default"} className="whitespace-nowrap">
-                                                        {req.status === 2 || req.status === "Approved" ? "Approved" : "Pending"}
-                                                    </Badge>
-                                                    {/* DEBUG: Print raw status value */}
-                                                    <span className="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
-                                                        raw: {req.status}
-                                                    </span>
+                                                    {getStatusBadge(req.status)}
                                                 </div>
                                             </div>
                                         ))}

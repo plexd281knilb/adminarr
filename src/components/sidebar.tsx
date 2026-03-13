@@ -12,8 +12,7 @@ import {
   Menu,
   X,
   LogOut,
-  Shield,
-  LifeBuoy
+  Shield
 } from "lucide-react"
 
 export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
@@ -42,13 +41,6 @@ export function Sidebar({ className }: React.HTMLAttributes<HTMLDivElement>) {
               <Button variant={pathname.startsWith("/users") ? "secondary" : "ghost"} className="w-full justify-start">
                 <Users className="mr-2 h-4 w-4" />
                 User List
-              </Button>
-            </Link>
-
-            <Link href="/admin/tickets">
-              <Button variant={pathname.startsWith("/admin/tickets") ? "secondary" : "ghost"} className="w-full justify-start">
-                <LifeBuoy className="mr-2 h-4 w-4" />
-                Support Tickets
               </Button>
             </Link>
 
@@ -114,12 +106,6 @@ export function MobileSidebar() {
                   <Link href="/users" onClick={() => setIsOpen(false)}>
                     <Button variant={pathname.startsWith("/users") ? "secondary" : "ghost"} className="w-full justify-start">
                       <Users className="mr-2 h-4 w-4" /> User List
-                    </Button>
-                  </Link>
-
-                  <Link href="/admin/tickets" onClick={() => setIsOpen(false)}>
-                    <Button variant={pathname.startsWith("/admin/tickets") ? "secondary" : "ghost"} className="w-full justify-start">
-                      <LifeBuoy className="mr-2 h-4 w-4" /> Support Tickets
                     </Button>
                   </Link>
 

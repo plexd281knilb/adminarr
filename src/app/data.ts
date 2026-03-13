@@ -97,11 +97,12 @@ export async function fetchMediaAppsActivity() {
             const json = await res.json();
             if (json.queue) { data.online = true; data.queue = json.queue.slots || []; }
         } else if (app.type === "overseerr" || app.type === "jellyseerr") {
-             const res = await fetch(`${cleanUrl}/api/v1/request?take=1000&skip=0&sort=added`, { headers: { "X-Api-Key": app.apiKey || "" }, signal: controller.signal, cache: "no-store" });
+             const res = await fetch(`${cleanUrl}/api/v1/request?take=100&skip=0&sort=added`, { headers: { "X-Api-Key": app.apiKey || "" }, signal: controller.signal, cache: "no-store" });
              const json = await res.json();
              if (json.results) {
                  data.online = true;
-                 const activeRequests = json.results.filter((r: any) => r.status !== 4 && r.status !== 3);
+                 const activeRequests = json.results.filter((r: any) => r.status !== 3 && r.media?.status !== 5);
+                 
                  data.requests = await Promise.all(activeRequests.map(async (r: any) => {
                      let title = "Unknown Title";
                      try {
@@ -112,7 +113,19 @@ export async function fetchMediaAppsActivity() {
                             if (detailRes.ok) { const detail = await detailRes.json(); title = detail.title || detail.name || detail.originalTitle || "Unknown Title"; }
                          }
                      } catch (err) {}
-                     return { status: (r.status === 5) ? 2 : r.status, requestedBy: { displayName: r.requestedBy?.displayName || r.requestedBy?.email || "Unknown User" }, media: { title: `[${r.media?.mediaType === 'tv' ? 'TV' : 'Movie'}] ${title}` } };
+                     
+                     let finalStatus = "Pending";
+                     if (r.status === 2) {
+                         if (r.media?.status === 4) finalStatus = "Partially Available";
+                         else if (r.media?.status === 3) finalStatus = "Processing";
+                         else finalStatus = "Approved";
+                     }
+                     
+                     return { 
+                         status: finalStatus, 
+                         requestedBy: { displayName: r.requestedBy?.displayName || r.requestedBy?.email || "Unknown User" }, 
+                         media: { title: `[${r.media?.mediaType === 'tv' ? 'TV' : 'Movie'}] ${title}` } 
+                     };
                  }));
              }
         } else if (app.type === "ombi") {
@@ -123,12 +136,44 @@ export async function fetchMediaAppsActivity() {
              if (movieRes.ok || tvRes.ok) data.online = true;
              const movies = movieRes.ok ? await movieRes.json() : [];
              const tv = tvRes.ok ? await tvRes.json() : [];
-             const activeRequests = [...movies.map((m:any) => ({...m, uniqueType: 'movie'})), ...tv.map((t:any) => ({...t, uniqueType: 'tv'}))].filter((r: any) => !r.denied && !r.available && r.requestStatus !== 'Available');
-             data.requests = activeRequests.map((r: any) => ({
-                 status: r.approved ? 2 : 1, 
-                 requestedBy: { displayName: r.requestedUser?.userAlias || r.requestedUser?.userName || "Ombi User" },
-                 media: { title: `[${r.uniqueType === 'tv' ? 'TV' : 'Movie'}] ${r.title || "Unknown"}` }
-             }));
+             
+             const activeRequests = [...movies.map((m:any) => ({...m, uniqueType: 'movie'})), ...tv.map((t:any) => ({...t, uniqueType: 'tv'}))]
+                .filter((r: any) => {
+                    const isDenied = r.denied || (r.childRequests && r.childRequests.length > 0 && r.childRequests.every((c:any) => c.denied));
+                    const isAvailable = r.available || (r.childRequests && r.childRequests.length > 0 && r.childRequests.every((c:any) => c.available));
+                    const reqStatus = (r.requestStatus || "").toLowerCase();
+                    return !isDenied && !isAvailable && reqStatus !== 'available';
+                });
+             
+             data.requests = activeRequests.map((r: any) => {
+                 let finalStatus = "Pending";
+                 const isApproved = r.approved || (r.childRequests && r.childRequests.some((c:any) => c.approved));
+                 const isPartiallyAvailable = r.childRequests && r.childRequests.some((c:any) => c.available);
+
+                 if (isPartiallyAvailable) {
+                     finalStatus = "Partially Available";
+                 } else if (isApproved) {
+                     finalStatus = "Processing"; 
+                 }
+
+                 // OMBI USER FIX: Check the main object first, then dig into child seasons if it's missing
+                 let reqUser = r.requestedUser;
+                 if ((!reqUser || !reqUser.userName) && r.childRequests && r.childRequests.length > 0) {
+                     reqUser = r.childRequests[0].requestedUser;
+                 }
+
+                 // Ombi uses 'alias' first, then 'userName', then fallback to email
+                 let userName = "Ombi User";
+                 if (reqUser) {
+                     userName = reqUser.alias || reqUser.userName || reqUser.username || reqUser.emailAddress || "Ombi User";
+                 }
+
+                 return {
+                     status: finalStatus, 
+                     requestedBy: { displayName: userName },
+                     media: { title: `[${r.uniqueType === 'tv' ? 'TV' : 'Movie'}] ${r.title || "Unknown"}` }
+                 };
+             });
         } else {
              const res = await fetch(cleanUrl, { signal: controller.signal, mode: 'no-cors' });
              data.online = true;
