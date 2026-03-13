@@ -477,35 +477,7 @@ export async function deleteAppUser(id: string) {
     }
 }
 
-// --- LANDING PAGE ACTIONS ---
 
-export async function getLandingStats() {
-    const tautulli = await prisma.tautulliInstance.findMany();
-
-    let totalStreams = 0;
-
-    await Promise.all(tautulli.map(async (t) => {
-        let baseUrl = cleanUrl(t.url).replace(/\/api\/v2\/?$/, "");
-        const fullUrl = `${baseUrl}/api/v2?apikey=${t.apiKey}&cmd=get_activity`;
-
-        try {
-            const res = await fetch(fullUrl, { next: { revalidate: 10 } });
-            
-            if (!res.ok) {
-                return;
-            }
-            
-            const data = await res.json();
-            if (data.response?.data?.stream_count) {
-                totalStreams += Number(data.response.data.stream_count);
-            }
-        } catch (e: any) { 
-            console.error(`Failed Tautulli (${t.name}): ${e.message} | URL: ${fullUrl}`); 
-        }
-    }));
-
-    return { totalStreams };
-}
 
 export async function sendManualEmail(formData: FormData) {
     const to = formData.get("to") as string;
