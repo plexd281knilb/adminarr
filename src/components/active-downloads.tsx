@@ -204,8 +204,8 @@ export default function AdminOverviewPage() {
                                                     <span className="font-medium block truncate">{req.media?.title || "Unknown"}</span>
                                                     <span className="text-xs text-muted-foreground">{req.requestedBy?.displayName}</span>
                                                 </div>
-                                                <Badge variant={req.status === 2 || req.status === \"Approved\" ? \"secondary\" : \"default\"} className="whitespace-nowrap ml-2">
-                                                    {req.status === 2 || req.status === \"Approved\" ? \"Approved\" : \"Pending\"}
+                                                <Badge variant={req.status === 2 || req.status === "Approved" ? "secondary" : "default"} className="whitespace-nowrap ml-2">
+                                                    {req.status === 2 || req.status === "Approved" ? "Approved" : "Pending"}
                                                 </Badge>
                                             </div>
                                         ))}

@@ -5,8 +5,8 @@ import { jwtVerify } from "jose";
 // Must match the key used in your auth-actions.ts
 const SECRET_KEY = new TextEncoder().encode(process.env.JWT_SECRET || "default-secret-key-change-me");
 
-// Change "proxy" to "middleware" here
-export async function middleware(req: NextRequest) {
+// Change "proxy" to "proxy" here
+export async function proxy(req: NextRequest) {
   const session = req.cookies.get("session")?.value;
   const { pathname } = req.nextUrl;
 
