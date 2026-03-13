@@ -214,9 +214,3 @@ export async function fetchServiceHealth() {
     } catch (e) { return { id: s.id, name: s.name, online: false }; }
   }));
 }
-
-// --- CRON & SYNC JOBS ---
-export async function performSync() {
-    // Logic for background syncing
-    return { success: true, logs: ["Sync triggered successfully"] };
-}
