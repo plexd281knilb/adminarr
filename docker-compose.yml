@@ -10,7 +10,11 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
+    env_file:
+      - .env  # <--- This automatically pulls in your ARRAY, PLEX, and TDARR variables
     environment:
+      # Keep these here! The compose file overrides the .env file.
+      # Your .env says "./dev.db", but the container needs "/app/data/dev.db"
       - DATABASE_URL=file:/app/data/dev.db
       - NODE_ENV=production
     volumes:
