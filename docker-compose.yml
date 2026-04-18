@@ -11,12 +11,11 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     env_file:
-      - .env  # This is safe to commit!
+      - .env
     environment:
-      - DATABASE_URL=file:/app/data/dev.db
+      - DATABASE_URL=file:/app/prisma/dev.db
       - NODE_ENV=production
     volumes:
-      - ./data:/app/data
-      # Instruct users (or yourself) to map their own paths in a local override or .env
+      - ./prisma:/app/prisma
       - ${ARRAY_MOUNT_PATH:-/mnt/user}:${ARRAY_MOUNT_PATH:-/mnt/user}
       - ${REMOTES_MOUNT_PATH:-/mnt/remotes}:${REMOTES_MOUNT_PATH:-/mnt/remotes}
